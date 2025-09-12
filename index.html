@@ -80,6 +80,7 @@
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <button id="btnToggleMcd">عرض ماكدونالدز</button>
@@ -87,7 +88,8 @@
 <button id="btnToggleKFC">عرض KFC</button>
 <button id="btnToggleKUDU">عرض KUDU</button>
 <button id="btnToggleSuggested">عرض المواقع المقترحة</button>
-  
+<button id="btnToggleSuggestedIso">عرض خريطة توصيل المواقع المقترحة</button>
+
 <div id="map"></div>
 
   <!-- لوحة التحكم -->
@@ -154,8 +156,9 @@
   🗑️ مسح كل المواقع المقترحة
 </button>
 <button id="btnDownloadSuggested" style="width:100%; background-color:#3498db; color:white; margin-top: 8px;">
-  💾 تنزيل المواقع المقترحة (JSON)
+  💾 تنزيل المواقع المقترحة (Excel)
 </button>
+<div style="font-size:11px;color:#666;margin-top:4px;">انقر بزر الفأرة الأيمن على موقع مقترح لحذفه.</div>
 
   </div>
     </div>
@@ -221,6 +224,15 @@
     const isochroneLayers = L.layerGroup().addTo(map);
     const areasLayer      = L.layerGroup().addTo(map);
 
+    // تحميل خريطة الأحياء من ملف TopoJSON خارجي
+    fetch('jeddah_topo.json')
+      .then(r => r.json())
+      .then(topo => {
+        const geo = topojson.feature(topo, topo.objects["1"]);
+        L.geoJSON(geo, { style:{ color:'#555', weight:1, fillOpacity:0 } }).addTo(areasLayer);
+      })
+      .catch(err => console.error('failed loading jeddah topo', err));
+
     // DOM
     const branchSelect    = document.getElementById('branchSelect');
     const btnShowAll      = document.getElementById('btnShowAll');
@@ -261,6 +273,9 @@ const kuduLayer = L.layerGroup();
 // طبقة المواقع المقترحة
 const suggestedLayer = L.layerGroup();
 let suggestedVisible = false;
+// طبقة مناطق التوصيل للمواقع المقترحة
+const suggestedIsoLayer = L.layerGroup();
+let suggestedIsoVisible = false;
 
 // مصفوفة لتخزين بيانات المواقع المقترحة
 // استخدم let بدلاً من const لأننا سنضيف إليها بيانات جديدة
@@ -341,11 +356,48 @@ function buildSuggestedLayers() {
     iconAnchor: [12, 12]
   });
 
-  SUGGESTED_SITES.forEach(p => {
-    L.marker([p.lat, p.lng], { icon })
+  SUGGESTED_SITES.forEach((p, idx) => {
+    const marker = L.marker([p.lat, p.lng], { icon })
       .bindTooltip(p.name, { direction: 'top' })
       .addTo(suggestedLayer);
+
+    // حذف موقع محدد بالنقر بزر الفأرة الأيمن
+    marker.on('contextmenu', () => {
+      if (!confirm(`حذف الموقع "${p.name}"؟`)) return;
+      SUGGESTED_SITES.splice(idx, 1);
+      if (SUGGESTED_SITES.length > 0) {
+        localStorage.setItem('suggestedSites', JSON.stringify(SUGGESTED_SITES));
+      } else {
+        localStorage.removeItem('suggestedSites');
+      }
+      buildSuggestedLayers();
+    });
   });
+  if (suggestedIsoVisible) {
+    const dist = Number(distanceInput.value || 6000);
+    drawSuggestedIsochrones(dist);
+  }
+}
+
+async function drawSuggestedIsochrones(dist) {
+  suggestedIsoLayer.clearLayers();
+  if (!MAPBOX_TOKEN || !chkIsochrones.checked) return;
+  const tasks = SUGGESTED_SITES.map(async (p) => {
+    try {
+      const url = `https://api.mapbox.com/isochrone/v1/mapbox/${ISO_PROFILE}/${p.lng},${p.lat}?contours_meters=${dist}&polygons=true&access_token=${MAPBOX_TOKEN}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error('Isochrone error', await res.text());
+        return;
+      }
+      const data = await res.json();
+      const layer = L.geoJSON(data, { style: { color: '#8e44ad', weight: 2, fillOpacity: 0.25, fillColor: '#8e44ad' } }).bindTooltip(p.name);
+      suggestedIsoLayer.addLayer(layer);
+    } catch (err) {
+      console.error('fetch suggested isochrone failed', err);
+    }
+  });
+  await Promise.all(tasks);
 }
 const btnToggleKFC  = document.getElementById('btnToggleKFC');
 const btnToggleKUDU = document.getElementById('btnToggleKUDU');
@@ -376,6 +428,7 @@ btnToggleKUDU.onclick = () => {
 };
 
 const btnToggleSuggested = document.getElementById('btnToggleSuggested');
+const btnToggleSuggestedIso = document.getElementById('btnToggleSuggestedIso');
 
 btnToggleSuggested.onclick = () => {
   suggestedVisible = !suggestedVisible;
@@ -385,6 +438,19 @@ btnToggleSuggested.onclick = () => {
   } else {
     map.removeLayer(suggestedLayer);
     btnToggleSuggested.textContent = 'عرض المواقع المقترحة';
+  }
+};
+
+btnToggleSuggestedIso.onclick = async () => {
+  suggestedIsoVisible = !suggestedIsoVisible;
+  if (suggestedIsoVisible) {
+    const dist = Number(distanceInput.value || 6000);
+    await drawSuggestedIsochrones(dist);
+    suggestedIsoLayer.addTo(map);
+    btnToggleSuggestedIso.textContent = 'إخفاء خريطة توصيل المواقع المقترحة';
+  } else {
+    map.removeLayer(suggestedIsoLayer);
+    btnToggleSuggestedIso.textContent = 'عرض خريطة توصيل المواقع المقترحة';
   }
 };
 
@@ -1814,8 +1880,24 @@ const AREAS_GEOJSON = {
     });
 
     // عناصر إضافية
-    btnRefreshIso.addEventListener('click', renderSelectedBranches);
-    chkIsochrones.addEventListener('change', renderSelectedBranches);
+    btnRefreshIso.addEventListener('click', () => {
+      renderSelectedBranches();
+      if (suggestedIsoVisible) {
+        const dist = Number(distanceInput.value || 6000);
+        drawSuggestedIsochrones(dist);
+      }
+    });
+    chkIsochrones.addEventListener('change', () => {
+      renderSelectedBranches();
+      if (suggestedIsoVisible) {
+        if (chkIsochrones.checked) {
+          const dist = Number(distanceInput.value || 6000);
+          drawSuggestedIsochrones(dist);
+        } else {
+          suggestedIsoLayer.clearLayers();
+        }
+      }
+    });
     chkLabels.addEventListener('change', renderSelectedAreas);
 
     btnFitSelected.addEventListener('click', fitSelection);
@@ -1887,6 +1969,7 @@ btnToggleMcdRings.onclick = () => {
 
 // 1. منطق زر تفعيل/إلغاء وضع الإضافة
 const btnAddSite = document.getElementById('btnAddSite');
+const btnClearSuggested = document.getElementById('btnClearSuggested');
 
 btnAddSite.onclick = () => {
   isAddModeActive = !isAddModeActive; // عكس الحالة
@@ -1898,6 +1981,23 @@ btnAddSite.onclick = () => {
     btnAddSite.textContent = '➕ تفعيل وضع إضافة موقع';
     btnAddSite.style.backgroundColor = '#27ae60'; // اللون الأخضر الافتراضي
     map.getContainer().style.cursor = ''; // إعادة المؤشر للشكل الطبيعي
+  }
+};
+
+// مسح جميع المواقع المقترحة وإزالة التخزين المحلي
+btnClearSuggested.onclick = () => {
+  if (!confirm('هل أنت متأكد من مسح كل المواقع المقترحة؟')) return;
+  SUGGESTED_SITES = [];
+  suggestedLayer.clearLayers();
+  suggestedIsoLayer.clearLayers();
+  localStorage.removeItem('suggestedSites');
+  if (suggestedVisible) {
+    btnToggleSuggested.click();
+  } else {
+    buildSuggestedLayers();
+  }
+  if (suggestedIsoVisible) {
+    btnToggleSuggestedIso.click();
   }
 };
 
@@ -1963,22 +2063,16 @@ btnDownloadSuggested.onclick = () => {
     return;
   }
 
-  // 3. إنشاء "ملف مؤقت" في ذاكرة المتصفح (Blob)
-  const blob = new Blob([savedData], { type: 'application/json' });
+  // 3. تحويل البيانات من JSON إلى مصفوفة كائنات
+  const jsonData = JSON.parse(savedData);
 
-  // 4. إنشاء رابط مؤقت لهذا الملف
-  const url = URL.createObjectURL(blob);
+  // 4. إنشاء ملف Excel باستخدام مكتبة SheetJS
+  const worksheet = XLSX.utils.json_to_sheet(jsonData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'SuggestedSites');
 
-  // 5. إنشاء عنصر رابط مخفي لتشغيل عملية التنزيل
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'suggested_sites.json'; // هذا هو اسم الملف الذي سيتم حفظه
-  document.body.appendChild(a); // يجب إضافة الرابط للصفحة ليتمكن من العمل
-  a.click(); // محاكاة نقرة المستخدم على الرابط
-
-  // 6. تنظيف الروابط المؤقتة من الصفحة والذاكرة
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // 5. تنزيل الملف بصيغة .xlsx
+  XLSX.writeFile(workbook, 'suggested_sites.xlsx');
 };
 
   </script>
