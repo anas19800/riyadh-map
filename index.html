@@ -88,7 +88,8 @@
 <button id="btnToggleKFC">عرض KFC</button>
 <button id="btnToggleKUDU">عرض KUDU</button>
 <button id="btnToggleSuggested">عرض المواقع المقترحة</button>
-  
+<button id="btnToggleSuggestedIso">عرض خريطة توصيل المواقع المقترحة</button>
+
 <div id="map"></div>
 
   <!-- لوحة التحكم -->
@@ -263,6 +264,9 @@ const kuduLayer = L.layerGroup();
 // طبقة المواقع المقترحة
 const suggestedLayer = L.layerGroup();
 let suggestedVisible = false;
+// طبقة مناطق التوصيل للمواقع المقترحة
+const suggestedIsoLayer = L.layerGroup();
+let suggestedIsoVisible = false;
 
 // مصفوفة لتخزين بيانات المواقع المقترحة
 // استخدم let بدلاً من const لأننا سنضيف إليها بيانات جديدة
@@ -360,6 +364,31 @@ function buildSuggestedLayers() {
       buildSuggestedLayers();
     });
   });
+  if (suggestedIsoVisible) {
+    const dist = Number(distanceInput.value || 6000);
+    drawSuggestedIsochrones(dist);
+  }
+}
+
+async function drawSuggestedIsochrones(dist) {
+  suggestedIsoLayer.clearLayers();
+  if (!MAPBOX_TOKEN || !chkIsochrones.checked) return;
+  const tasks = SUGGESTED_SITES.map(async (p) => {
+    try {
+      const url = `https://api.mapbox.com/isochrone/v1/mapbox/${ISO_PROFILE}/${p.lng},${p.lat}?contours_meters=${dist}&polygons=true&access_token=${MAPBOX_TOKEN}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error('Isochrone error', await res.text());
+        return;
+      }
+      const data = await res.json();
+      const layer = L.geoJSON(data, { style: { color: '#8e44ad', weight: 2, fillOpacity: 0.25, fillColor: '#8e44ad' } }).bindTooltip(p.name);
+      suggestedIsoLayer.addLayer(layer);
+    } catch (err) {
+      console.error('fetch suggested isochrone failed', err);
+    }
+  });
+  await Promise.all(tasks);
 }
 const btnToggleKFC  = document.getElementById('btnToggleKFC');
 const btnToggleKUDU = document.getElementById('btnToggleKUDU');
@@ -390,6 +419,7 @@ btnToggleKUDU.onclick = () => {
 };
 
 const btnToggleSuggested = document.getElementById('btnToggleSuggested');
+const btnToggleSuggestedIso = document.getElementById('btnToggleSuggestedIso');
 
 btnToggleSuggested.onclick = () => {
   suggestedVisible = !suggestedVisible;
@@ -399,6 +429,19 @@ btnToggleSuggested.onclick = () => {
   } else {
     map.removeLayer(suggestedLayer);
     btnToggleSuggested.textContent = 'عرض المواقع المقترحة';
+  }
+};
+
+btnToggleSuggestedIso.onclick = async () => {
+  suggestedIsoVisible = !suggestedIsoVisible;
+  if (suggestedIsoVisible) {
+    const dist = Number(distanceInput.value || 6000);
+    await drawSuggestedIsochrones(dist);
+    suggestedIsoLayer.addTo(map);
+    btnToggleSuggestedIso.textContent = 'إخفاء خريطة توصيل المواقع المقترحة';
+  } else {
+    map.removeLayer(suggestedIsoLayer);
+    btnToggleSuggestedIso.textContent = 'عرض خريطة توصيل المواقع المقترحة';
   }
 };
 
@@ -1828,8 +1871,24 @@ const AREAS_GEOJSON = {
     });
 
     // عناصر إضافية
-    btnRefreshIso.addEventListener('click', renderSelectedBranches);
-    chkIsochrones.addEventListener('change', renderSelectedBranches);
+    btnRefreshIso.addEventListener('click', () => {
+      renderSelectedBranches();
+      if (suggestedIsoVisible) {
+        const dist = Number(distanceInput.value || 6000);
+        drawSuggestedIsochrones(dist);
+      }
+    });
+    chkIsochrones.addEventListener('change', () => {
+      renderSelectedBranches();
+      if (suggestedIsoVisible) {
+        if (chkIsochrones.checked) {
+          const dist = Number(distanceInput.value || 6000);
+          drawSuggestedIsochrones(dist);
+        } else {
+          suggestedIsoLayer.clearLayers();
+        }
+      }
+    });
     chkLabels.addEventListener('change', renderSelectedAreas);
 
     btnFitSelected.addEventListener('click', fitSelection);
@@ -1921,11 +1980,15 @@ btnClearSuggested.onclick = () => {
   if (!confirm('هل أنت متأكد من مسح كل المواقع المقترحة؟')) return;
   SUGGESTED_SITES = [];
   suggestedLayer.clearLayers();
+  suggestedIsoLayer.clearLayers();
   localStorage.removeItem('suggestedSites');
   if (suggestedVisible) {
     btnToggleSuggested.click();
   } else {
     buildSuggestedLayers();
+  }
+  if (suggestedIsoVisible) {
+    btnToggleSuggestedIso.click();
   }
 };
 
