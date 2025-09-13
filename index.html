@@ -16,11 +16,22 @@
       max-height: 85vh;           /* keep the panel within the viewport height */
       overflow-y: auto;            /* make inner content scroll */
       z-index: 9999;               /* keep it above map markers and buttons */
-    
+
       position: absolute; top: 25px; right: 10px; z-index: 1000;
       background: #fff; padding: 12px; border-radius: var(--radius);
       box-shadow: var(--card-shadow); width: 360px; max-width: calc(100% - 20px);
     }
+    /* Compact mode: narrower panel and smaller controls */
+    .panel.compact { width: 280px; }
+    .panel.compact h3 { font-size: 14px; }
+    .panel.compact .group { margin-bottom: 10px; }
+    .panel.compact label { font-size: 12px; }
+    .panel.compact select,
+    .panel.compact input[type="number"],
+    .panel.compact button { font-size: 12px; padding: 5px 6px; }
+    .panel.compact .row { gap: 6px; }
+    .panel.compact .actions-sm button { padding:5px 6px; font-size:11px; }
+    .panel.compact .checklist { max-height: 220px; }
     .panel h3 { cursor: move; user-select: none;  margin: 0 0 8px; font-size: 16px; }
     .panel .group { margin-bottom: 12px; }
     .panel label { display: block; font-size: 13px; margin-bottom: 4px; }
@@ -39,6 +50,19 @@
     .checklist label { display: flex; align-items: center; gap: 6px; padding: 4px 2px; font-size: 13px; }
     .actions-sm { display:flex; gap:8px; margin-top:6px; }
     .actions-sm button { padding:6px 8px; font-size:12px; }
+
+    /* Panel toggle buttons */
+    .panel-hide-btn {
+      position: absolute; top: 6px; left: 6px; /* left for RTL so it doesn't overlap title */
+      border: 1px solid #ddd; background:#fafafa; border-radius: 8px;
+      padding: 4px 8px; font-size: 12px; cursor: pointer;
+    }
+    .panel-show-btn {
+      position: absolute; top: 25px; right: 10px; z-index: 1001;
+      border: 1px solid #ddd; background:#fff; border-radius: 8px;
+      padding: 6px 10px; font-size: 13px; box-shadow: var(--card-shadow); cursor:pointer;
+      display: none; /* hidden when panel is visible */
+    }
 
     /* Tooltip لنص الحي */
     .leaflet-tooltip.area-label-tip {
@@ -80,6 +104,7 @@
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <button id="btnToggleMcd">عرض ماكدونالدز</button>
@@ -87,11 +112,21 @@
 <button id="btnToggleKFC">عرض KFC</button>
 <button id="btnToggleKUDU">عرض KUDU</button>
 <button id="btnToggleSuggested">عرض المواقع المقترحة</button>
-  
+<button id="btnToggleSuggestedIso">عرض خريطة توصيل المواقع المقترحة</button>
+
+<!-- أزرار الفلاتر السريعة بالأعلى -->
+<button id="btnKazMall">كازباستا داخل المول</button>
+<button id="btnKazPlaza">كازباستا في البلازا</button>
+<button id="btnKfcFeatured">كنتاكي المتميزة</button>
+<button id="btnKuduFeatured">كودو المتميزة</button>
+
 <div id="map"></div>
+<!-- Show button appears when panel is hidden -->
+<button id="btnShowPanel" class="panel-show-btn" title="إظهار لوحة التحكم">إظهار لوحة التحكم</button>
 
   <!-- لوحة التحكم -->
-  <div class="panel" id="control-panel" dir="rtl">
+  <div class="panel compact" id="control-panel" dir="rtl">
+    <button id="btnHidePanel" class="panel-hide-btn" title="إخفاء لوحة التحكم">إخفاء</button>
     <h3>التحكم بالخريطة</h3>
 
     <!-- فروع (اختيار واحد قديم) -->
@@ -115,14 +150,27 @@
       </div>
     </div>
 
+    <!-- فلاتر سريعة للفروع والعلامات -->
+    <div class="group">
+      <label>فلاتر سريعة</label>
+      <div class="row">
+        <button id="btnKazMall">كازباستا داخل المول</button>
+        <button id="btnKazPlaza">كازباستا في البلازا</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="btnKfcFeatured">كنتاكي المتميزة</button>
+        <button id="btnKuduFeatured">كودو المتميزة</button>
+      </div>
+    </div>
+
     <div class="group">
       <label>نطاق التوصيل (متر)</label>
       <div class="row">
-        <input type="number" id="distanceInput" min="500" step="500" value="6000" />
+        <input type="number" id="distanceInput" min="500" step="500" value="5000" />
         <button id="btnRefreshIso" title="إعادة رسم مناطق التوصيل">تحديث</button>
       </div>
       <div style="margin-top:6px; display:flex; gap:8px; align-items:center;">
-        <label class="chip"><input type="checkbox" id="chkIsochrones" checked style="margin-inline-end:6px"> إظهار مناطق التوصيل</label>
+        <label class="chip"><input type="checkbox" id="chkIsochrones" style="margin-inline-end:6px"> إظهار مناطق التوصيل</label>
         <label class="chip"><input type="checkbox" id="chkLabels"  style="margin-inline-end:6px"> أسماء الأحياء</label>
       </div>
       <div style="font-size:11px;color:#666;margin-top:6px">يستخدم <b>Mapbox Isochrone API</b> — ضع مفتاحك في <code>MAPBOX_TOKEN</code>.</div>
@@ -154,8 +202,9 @@
   🗑️ مسح كل المواقع المقترحة
 </button>
 <button id="btnDownloadSuggested" style="width:100%; background-color:#3498db; color:white; margin-top: 8px;">
-  💾 تنزيل المواقع المقترحة (JSON)
+  💾 تنزيل المواقع المقترحة (Excel)
 </button>
+<div style="font-size:11px;color:#666;margin-top:4px;">انقر بزر الفأرة الأيمن على موقع مقترح لحذفه.</div>
 
   </div>
     </div>
@@ -207,6 +256,37 @@
   });
 })();
 
+// Show/Hide control panel
+(function(){
+  const panel = document.getElementById('control-panel');
+  const btnHide = document.getElementById('btnHidePanel');
+  const btnShow = document.getElementById('btnShowPanel');
+  if (!panel || !btnHide || !btnShow) return;
+  btnHide.addEventListener('click', () => {
+    panel.style.display = 'none';
+    btnShow.style.display = 'inline-block';
+  });
+  btnShow.addEventListener('click', () => {
+    panel.style.display = 'block';
+    btnShow.style.display = 'none';
+  });
+})();
+
+// إزالة نسخة الأزرار من داخل اللوحة (تم نقلها للأعلى)
+(function(){
+  const panel = document.getElementById('control-panel');
+  if (!panel) return;
+  try{
+    const anyBtn = panel.querySelector('#btnKazMall, #btnKazPlaza, #btnKfcFeatured, #btnKuduFeatured');
+    const grp = anyBtn ? anyBtn.closest('.group') : null;
+    if (grp) {
+      grp.remove();
+    } else {
+      panel.querySelectorAll('#btnKazMall, #btnKazPlaza, #btnKfcFeatured, #btnKuduFeatured').forEach(el => el.remove());
+    }
+  }catch(e){}
+})();
+
 
     /********************
      * (1) الإعدادات العامة
@@ -220,6 +300,15 @@
     const branchMarkers   = L.layerGroup().addTo(map);
     const isochroneLayers = L.layerGroup().addTo(map);
     const areasLayer      = L.layerGroup().addTo(map);
+
+    // تحميل خريطة الأحياء من ملف TopoJSON خارجي
+    fetch('jeddah_topo.json')
+      .then(r => r.json())
+      .then(topo => {
+        const geo = topojson.feature(topo, topo.objects["1"]);
+        L.geoJSON(geo, { style:{ color:'#555', weight:1, fillOpacity:0 } }).addTo(areasLayer);
+      })
+      .catch(err => console.error('failed loading jeddah topo', err));
 
     // DOM
     const branchSelect    = document.getElementById('branchSelect');
@@ -243,6 +332,12 @@
     const btnFitSelected  = document.getElementById('btnFitSelected');
     const btnToggleAreas  = document.getElementById('btnToggleAreas');
 
+    // عناصر أزرار الفلاتر الجديدة
+    const btnKazMall       = document.getElementById('btnKazMall');
+    const btnKazPlaza      = document.getElementById('btnKazPlaza');
+    const btnKfcFeatured   = document.getElementById('btnKfcFeatured');
+    const btnKuduFeatured  = document.getElementById('btnKuduFeatured');
+
     const state = {
       selectedBranches: new Set(),
       selectedAreas: new Set(),
@@ -258,9 +353,15 @@ const MCD_RADIUS_M = 2500;
 // طبقات KFC وKUDU
 const kfcLayer  = L.layerGroup();
 const kuduLayer = L.layerGroup();
+// طبقات الفروع المتميزة
+const kfcFeaturedLayer  = L.layerGroup();
+const kuduFeaturedLayer = L.layerGroup();
 // طبقة المواقع المقترحة
 const suggestedLayer = L.layerGroup();
 let suggestedVisible = false;
+// طبقة مناطق التوصيل للمواقع المقترحة
+const suggestedIsoLayer = L.layerGroup();
+let suggestedIsoVisible = false;
 
 // مصفوفة لتخزين بيانات المواقع المقترحة
 // استخدم let بدلاً من const لأننا سنضيف إليها بيانات جديدة
@@ -341,17 +442,56 @@ function buildSuggestedLayers() {
     iconAnchor: [12, 12]
   });
 
-  SUGGESTED_SITES.forEach(p => {
-    L.marker([p.lat, p.lng], { icon })
+  SUGGESTED_SITES.forEach((p, idx) => {
+    const marker = L.marker([p.lat, p.lng], { icon })
       .bindTooltip(p.name, { direction: 'top' })
       .addTo(suggestedLayer);
+
+    // حذف موقع محدد بالنقر بزر الفأرة الأيمن
+    marker.on('contextmenu', () => {
+      if (!confirm(`حذف الموقع "${p.name}"؟`)) return;
+      SUGGESTED_SITES.splice(idx, 1);
+      if (SUGGESTED_SITES.length > 0) {
+        localStorage.setItem('suggestedSites', JSON.stringify(SUGGESTED_SITES));
+      } else {
+        localStorage.removeItem('suggestedSites');
+      }
+      buildSuggestedLayers();
+    });
   });
+  if (suggestedIsoVisible) {
+    const dist = Number(distanceInput.value || 5000);
+    drawSuggestedIsochrones(dist);
+  }
+}
+
+async function drawSuggestedIsochrones(dist) {
+  suggestedIsoLayer.clearLayers();
+  if (!MAPBOX_TOKEN || !chkIsochrones.checked) return;
+  const tasks = SUGGESTED_SITES.map(async (p) => {
+    try {
+      const url = `https://api.mapbox.com/isochrone/v1/mapbox/${ISO_PROFILE}/${p.lng},${p.lat}?contours_meters=${dist}&polygons=true&access_token=${MAPBOX_TOKEN}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error('Isochrone error', await res.text());
+        return;
+      }
+      const data = await res.json();
+      const layer = L.geoJSON(data, { style: { color: '#8e44ad', weight: 2, fillOpacity: 0.25, fillColor: '#8e44ad' } }).bindTooltip(p.name);
+      suggestedIsoLayer.addLayer(layer);
+    } catch (err) {
+      console.error('fetch suggested isochrone failed', err);
+    }
+  });
+  await Promise.all(tasks);
 }
 const btnToggleKFC  = document.getElementById('btnToggleKFC');
 const btnToggleKUDU = document.getElementById('btnToggleKUDU');
 
 let kfcVisible = false;
 let kuduVisible = false;
+let kfcFeaturedVisible = false;
+let kuduFeaturedVisible = false;
 
 btnToggleKFC.onclick = () => {
   kfcVisible = !kfcVisible;
@@ -375,7 +515,42 @@ btnToggleKUDU.onclick = () => {
   }
 };
 
+// مساعد: التعرّف على كون الفرع متميزاً (يدعم مفاتيح عربية/إنجليزية)
+function isFeaturedBranch(obj){
+  try {
+    const raw = (obj && (obj.featured ?? obj['متميز'] ?? obj['متميز او عادي']));
+    if (typeof raw === 'boolean') return raw;
+    const s = (raw ?? '').toString().trim().toLowerCase();
+    if (!s) return false;
+    return (
+      s === 'featured' || s === 'yes' || s === 'true' || s === '1' ||
+      s.includes('متميز') || s.includes('ممي')
+    );
+  } catch { return false; }
+}
+
+function buildKfcFeatured(){
+  kfcFeaturedLayer.clearLayers();
+  const icon = L.divIcon({ html: '<div>★</div>', className: 'brand-icon kfc', iconSize:[24,24], iconAnchor:[12,12] });
+  KFC.filter(isFeaturedBranch).forEach(p => {
+    L.marker([p.lat, p.lng], { icon })
+      .bindTooltip(p.name, { direction: 'top' })
+      .addTo(kfcFeaturedLayer);
+  });
+}
+
+function buildKuduFeatured(){
+  kuduFeaturedLayer.clearLayers();
+  const icon = L.divIcon({ html: '<div>★</div>', className: 'brand-icon kudu', iconSize:[24,24], iconAnchor:[12,12] });
+  KUDU.filter(isFeaturedBranch).forEach(p => {
+    L.marker([p.lat, p.lng], { icon })
+      .bindTooltip(p.name, { direction: 'top' })
+      .addTo(kuduFeaturedLayer);
+  });
+}
+
 const btnToggleSuggested = document.getElementById('btnToggleSuggested');
+const btnToggleSuggestedIso = document.getElementById('btnToggleSuggestedIso');
 
 btnToggleSuggested.onclick = () => {
   suggestedVisible = !suggestedVisible;
@@ -388,15 +563,52 @@ btnToggleSuggested.onclick = () => {
   }
 };
 
+btnToggleSuggestedIso.onclick = async () => {
+  suggestedIsoVisible = !suggestedIsoVisible;
+  if (suggestedIsoVisible) {
+    const dist = Number(distanceInput.value || 5000);
+    await drawSuggestedIsochrones(dist);
+    suggestedIsoLayer.addTo(map);
+    btnToggleSuggestedIso.textContent = 'إخفاء خريطة توصيل المواقع المقترحة';
+  } else {
+    map.removeLayer(suggestedIsoLayer);
+    btnToggleSuggestedIso.textContent = 'عرض خريطة توصيل المواقع المقترحة';
+  }
+};
 
-
-
+// أزرار تفعيل عرض الفروع المتميزة KFC/KUDU
+if (btnKfcFeatured) {
+  btnKfcFeatured.onclick = () => {
+    kfcFeaturedVisible = !kfcFeaturedVisible;
+    if (kfcFeaturedVisible) {
+      buildKfcFeatured();
+      kfcFeaturedLayer.addTo(map);
+      btnKfcFeatured.textContent = 'إخفاء كنتاكي المتميزة';
+    } else {
+      map.removeLayer(kfcFeaturedLayer);
+      btnKfcFeatured.textContent = 'كنتاكي المتميزة';
+    }
+  };
+}
+if (btnKuduFeatured) {
+  btnKuduFeatured.onclick = () => {
+    kuduFeaturedVisible = !kuduFeaturedVisible;
+    if (kuduFeaturedVisible) {
+      buildKuduFeatured();
+      kuduFeaturedLayer.addTo(map);
+      btnKuduFeatured.textContent = 'إخفاء كودو المتميزة';
+    } else {
+      map.removeLayer(kuduFeaturedLayer);
+      btnKuduFeatured.textContent = 'كودو المتميزة';
+    }
+  };
+}
 
     /********************
      * (2) بيانات الفروع
      ********************/
     const BRANCHES = [
-  { latitude: 26.45500787, longitude: 50.10576732, name: 'LCP-001 Marina Mall D' },
+  { latitude: 26.45500787, longitude: 50.10576732, name: 'LCP-001 Marina Mall D'},
   { latitude: 26.30946753, longitude: 50.16983585, name: 'LCP-002 Dhahran Mall' },
   { latitude: 26.28684758, longitude: 50.18401533, name: 'LCP-003 Venicia Mall' },
   { latitude: 25.35924088, longitude: 49.54710335, name: 'LCP-004 Nakhil Plaza' },
@@ -459,7 +671,7 @@ btnToggleSuggested.onclick = () => {
   { latitude: 24.82956771, longitude: 46.726672029, name: 'LCP-067 Park Avenue RYD' },
   { latitude: 24.69595948, longitude: 46.72854424, name: 'LCP-068 The View Mall ' },
   { latitude: 21.7742226164755, longitude: 39.1703136296965, name: 'LCP-069 The Village' },
-  { latitude: 21.4299759965894, longitude: 40.4987272172471, name: 'LCP-070 The Park Mall ' },
+  { latitude: 21.4299759965894, longitude: 40.4987272172471, name: 'LCP-070 The Park Mall '},
   { latitude: 21.5769371753782, longitude: 39.1967001396499, name: 'LCP-071 Aziz Mall' },
   { latitude: 21.3912136474259, longitude: 39.884578068482, name: 'LCP-072 Makkah Mall' },
   { latitude: 25.4232879, longitude: 49.59652638, name: 'LCP-073 Al Amer Mall' },
@@ -470,7 +682,6 @@ btnToggleSuggested.onclick = () => {
   { latitude: 24.587238, longitude: 46.761908, name: 'LCP-078 Taled Plaza' },
   { latitude: 24.63335382, longitude: 46.56505265, name: 'LCP-079 Dhayat Laban' },
   { latitude: 24.76315006, longitude: 46.63058924, name: 'LCP-080 Riyadh Park' },
-  { latitude: 24.7668368840486, longitude: 46.6058919130291, name: 'LCP-081 Riyadh Boulevard World' },
   { latitude: 26.53397415, longitude: 50.0272721, name: 'LCP-083 Al-Quds Qateef' },
   { latitude: 24.77012715, longitude: 46.60237552, name: 'LCP-085 Boulevard city ' },
   { latitude: 26.58740731, longitude: 50.02089927, name: 'LCP-086 C Front-Qatif' },
@@ -481,839 +692,1100 @@ btnToggleSuggested.onclick = () => {
 
 // === McDonald's Points (37) ===
 const MCDONALDS = [
-  { lat: 16.6054031999999, lng: 42.9377139, name: 'McDonalds-296' },
-  { lat: 16.6054031999999, lng: 42.9377139, name: 'McDonalds-298' },
-  { lat: 16.902064, lng: 42.5539689999999, name: 'McDonalds-303' },
-  { lat: 16.907363, lng: 42.544032, name: 'McDonalds-299' },
-  { lat: 16.9306075, lng: 42.5494135, name: 'McDonalds-300' },
-  { lat: 16.9602982, lng: 42.8204752, name: 'McDonalds-297' },
-  { lat: 17.1702791, lng: 42.6470374999999, name: 'McDonalds-301' },
-  { lat: 17.5064226999999, lng: 44.1879596, name: 'McDonalds-294' },
-  { lat: 17.563802, lng: 44.2289369999999, name: 'McDonalds-293' },
-  { lat: 17.6449106, lng: 44.4662514, name: 'McDonalds-295' },
-  { lat: 17.7379654, lng: 42.2716887, name: 'McDonalds-302' },
-  { lat: 18.1845298, lng: 42.8264907, name: 'McDonalds-307' },
-  { lat: 18.2306454999999, lng: 42.4896417, name: 'McDonalds-305' },
-  { lat: 18.2309955, lng: 42.55302, name: 'McDonalds-304' },
-  { lat: 18.2340064, lng: 42.6581425, name: 'McDonalds-306' },
-  { lat: 18.2379012, lng: 42.5802317, name: 'McDonalds-308' },
-  { lat: 18.2455472, lng: 42.7653755, name: 'McDonalds-309' },
-  { lat: 18.2752841, lng: 42.7202578, name: 'McDonalds-311' },
-  { lat: 18.2905458999999, lng: 42.7436376, name: 'McDonalds-310' },
-  { lat: 18.5437519999999, lng: 42.037272, name: 'McDonalds-312' },
-  { lat: 19.1207425, lng: 41.0978361999999, name: 'McDonalds-313' },
-  { lat: 19.8755624999999, lng: 41.5734375, name: 'McDonalds-316' },
-  { lat: 19.9882180999999, lng: 42.6006245999999, name: 'McDonalds-315' },
-  { lat: 20.0181942, lng: 41.4735602999999, name: 'McDonalds-314' },
-  { lat: 20.472208, lng: 44.784113, name: 'McDonalds-292' },
-  { lat: 21.2271933999999, lng: 40.4115943, name: 'McDonalds-272' },
-  { lat: 21.2475529, lng: 40.4145156, name: 'McDonalds-270' },
-  { lat: 21.2768502, lng: 40.4461425, name: 'McDonalds-279' },
-  { lat: 21.2828102999999, lng: 40.4037179, name: 'McDonalds-273' },
-  { lat: 21.2830816, lng: 40.4448979999999, name: 'McDonalds-278' },
-  { lat: 21.2868888999999, lng: 40.4189676999999, name: 'McDonalds-276' },
-  { lat: 21.2961267, lng: 40.4267184, name: 'McDonalds-274' },
-  { lat: 21.2961513, lng: 40.4178345, name: 'McDonalds-275' },
-  { lat: 21.337563, lng: 39.678844, name: 'McDonalds-259' },
-  { lat: 21.349474, lng: 39.905294, name: 'McDonalds-256' },
-  { lat: 21.3550155, lng: 40.4272322, name: 'McDonalds-271' },
-  { lat: 21.3552791, lng: 40.1142519, name: 'McDonalds-261' },
-  { lat: 21.355802, lng: 40.4498147, name: 'McDonalds-277' },
-  { lat: 21.3607624, lng: 39.9005564, name: 'McDonalds-268' },
-  { lat: 21.3611064999999, lng: 39.8229237, name: 'McDonalds-258' },
-  { lat: 21.3736536, lng: 39.8040199, name: 'McDonalds-269' },
-  { lat: 21.3764149999999, lng: 39.796945, name: 'McDonalds-254' },
-  { lat: 21.3899975999999, lng: 39.7054587, name: 'McDonalds-265' },
-  { lat: 21.3906089999999, lng: 39.884464, name: 'McDonalds-260' },
-  { lat: 21.3933848999999, lng: 39.7969742, name: 'McDonalds-251' },
-  { lat: 21.4080156, lng: 39.783881, name: 'McDonalds-263' },
-  { lat: 21.4194832, lng: 39.8243351, name: 'McDonalds-257' },
-  { lat: 21.4216767, lng: 40.4952266999999, name: 'McDonalds-280' },
-  { lat: 21.4256364, lng: 39.7903333, name: 'McDonalds-253' },
-  { lat: 21.4403211, lng: 39.7971992, name: 'McDonalds-252' },
-  { lat: 21.4466149999999, lng: 39.8620355, name: 'McDonalds-255' },
-  { lat: 21.4478747999999, lng: 39.8076973, name: 'McDonalds-266' },
-  { lat: 21.4502916999999, lng: 39.7624451, name: 'McDonalds-267' },
-  { lat: 21.450863, lng: 39.255592, name: 'McDonalds-235' },
-  { lat: 21.4603912999999, lng: 39.9488886, name: 'McDonalds-264' },
-  { lat: 21.4639219, lng: 39.2404024, name: 'McDonalds-243' },
-  { lat: 21.4847099, lng: 39.9411100999999, name: 'McDonalds-262' },
-  { lat: 21.5019916, lng: 40.4904688999999, name: 'McDonalds-281' },
-  { lat: 21.5103002, lng: 39.1866378, name: 'McDonalds-229' },
+  { lat: 26.4621949999999, lng: 50.113661, name: 'McDonalds-1' },
+  { lat: 26.4594469999999, lng: 50.0919899999999, name: 'McDonalds-2' },
+  { lat: 26.442628, lng: 50.118421, name: 'McDonalds-3' },
+  { lat: 26.4345909999999, lng: 50.085498, name: 'McDonalds-4' },
+  { lat: 26.469011, lng: 50.0598819999999, name: 'McDonalds-5' },
+  { lat: 26.4427509999999, lng: 50.065962, name: 'McDonalds-6' },
+  { lat: 26.4156099999999, lng: 50.108993, name: 'McDonalds-7' },
+  { lat: 26.399303, lng: 50.075584, name: 'McDonalds-8' },
+  { lat: 26.404125, lng: 50.057959, name: 'McDonalds-9' },
+  { lat: 26.4151059999999, lng: 50.0769979999999, name: 'McDonalds-10' },
+  { lat: 26.349902, lng: 50.0517819999999, name: 'McDonalds-11' },
+  { lat: 26.359828, lng: 50.189654, name: 'McDonalds-12' },
+  { lat: 26.366403, lng: 50.069747, name: 'McDonalds-13' },
+  { lat: 26.400232, lng: 50.117458, name: 'McDonalds-14' },
+  { lat: 26.350703, lng: 50.017973, name: 'McDonalds-15' },
+  { lat: 26.423391, lng: 50.029582, name: 'McDonalds-16' },
+  { lat: 26.380277, lng: 50.0116019999999, name: 'McDonalds-17' },
+  { lat: 26.33201, lng: 50.151145, name: 'McDonalds-18' },
   { lat: 21.5117864, lng: 39.2269182, name: 'McDonalds-19' },
-  { lat: 21.5163028, lng: 39.1543531, name: 'McDonalds-239' },
-  { lat: 21.5268429, lng: 39.1758899, name: 'McDonalds-241' },
-  { lat: 21.5341564999999, lng: 39.2026389, name: 'McDonalds-233' },
-  { lat: 21.5532391, lng: 39.2147444, name: 'McDonalds-242' },
-  { lat: 21.55517, lng: 39.7743, name: 'McDonalds-250' },
-  { lat: 21.5597709999999, lng: 39.1328229999999, name: 'McDonalds-246' },
-  { lat: 21.5765709999999, lng: 39.1508173, name: 'McDonalds-236' },
-  { lat: 21.5781302999999, lng: 39.2188468, name: 'McDonalds-244' },
-  { lat: 21.5883708, lng: 39.131732, name: 'McDonalds-245' },
-  { lat: 21.5931504, lng: 39.1858244999999, name: 'McDonalds-238' },
-  { lat: 21.595743, lng: 39.154831, name: 'McDonalds-230' },
-  { lat: 21.603509, lng: 39.2390298, name: 'McDonalds-240' },
-  { lat: 21.6067231999999, lng: 39.1240854, name: 'McDonalds-234' },
-  { lat: 21.6139987, lng: 39.1541006, name: 'McDonalds-237' },
-  { lat: 21.6585234999999, lng: 39.1234403, name: 'McDonalds-232' },
-  { lat: 21.6701811, lng: 39.1696477, name: 'McDonalds-231' },
-  { lat: 21.6901854, lng: 39.1102568999999, name: 'McDonalds-228' },
-  { lat: 21.7719229, lng: 39.1000843, name: 'McDonalds-249' },
-  { lat: 21.7861773, lng: 39.2025873, name: 'McDonalds-247' },
-  { lat: 21.7937542, lng: 39.1328222, name: 'McDonalds-248' },
-  { lat: 22.302252, lng: 46.731567, name: 'McDonalds-291' },
-  { lat: 22.8014276999999, lng: 39.050275, name: 'McDonalds-324' },
-  { lat: 23.417661, lng: 44.028782, name: 'McDonalds-284' },
+  { lat: 26.314404, lng: 50.1474989999999, name: 'McDonalds-20' },
+  { lat: 26.4044399999999, lng: 50.03745, name: 'McDonalds-21' },
+  { lat: 26.365381, lng: 50.0472143, name: 'McDonalds-22' },
+  { lat: 26.234557, lng: 49.988319, name: 'McDonalds-23' },
+  { lat: 26.286029, lng: 50.220368, name: 'McDonalds-24' },
+  { lat: 26.28333, lng: 50.1979629999999, name: 'McDonalds-25' },
+  { lat: 26.305235, lng: 50.1963189999999, name: 'McDonalds-26' },
+  { lat: 26.2665769999999, lng: 50.212969, name: 'McDonalds-27' },
+  { lat: 26.191461, lng: 50.1900539999999, name: 'McDonalds-28' },
+  { lat: 26.34987, lng: 49.969378, name: 'McDonalds-29' },
+  { lat: 26.1547649999999, lng: 50.161443, name: 'McDonalds-30' },
+  { lat: 26.290136, lng: 50.181503, name: 'McDonalds-31' },
+  { lat: 26.2942359999999, lng: 50.207408, name: 'McDonalds-32' },
+  { lat: 26.343225, lng: 50.000093, name: 'McDonalds-33' },
+  { lat: 26.3045239999999, lng: 50.170058, name: 'McDonalds-34' },
+  { lat: 26.329109, lng: 50.2135759999999, name: 'McDonalds-35' },
+  { lat: 26.2654423, lng: 50.0705652, name: 'McDonalds-36' },
+  { lat: 26.168801, lng: 49.9244939999999, name: 'McDonalds-38' },
+  { lat: 26.706317, lng: 50.05327, name: 'McDonalds-39' },
+  { lat: 26.468621, lng: 49.797058, name: 'McDonalds-40' },
+  { lat: 26.7886149, lng: 49.8462676, name: 'McDonalds-41' },
+  { lat: 27.011953, lng: 49.642519, name: 'McDonalds-42' },
+  { lat: 26.9285529999999, lng: 49.7037799999999, name: 'McDonalds-43' },
+  { lat: 27.0041759999999, lng: 49.659997, name: 'McDonalds-44' },
+  { lat: 26.996702, lng: 49.6606029999999, name: 'McDonalds-45' },
+  { lat: 26.8350108, lng: 49.5619778999999, name: 'McDonalds-46' },
+  { lat: 27.1381327999999, lng: 49.5662777999999, name: 'McDonalds-47' },
+  { lat: 27.156212, lng: 49.5410459999999, name: 'McDonalds-48' },
+  { lat: 27.136457, lng: 49.5684789999999, name: 'McDonalds-49' },
+  { lat: 27.2535229999999, lng: 49.015926, name: 'McDonalds-50' },
+  { lat: 27.4732089999999, lng: 48.4885249999999, name: 'McDonalds-51' },
+  { lat: 28.4225624999999, lng: 48.4828124999999, name: 'McDonalds-52' },
+  { lat: 28.434262, lng: 48.494537, name: 'McDonalds-53' },
+  { lat: 28.3747629999999, lng: 45.9613979999999, name: 'McDonalds-55' },
+  { lat: 28.317957, lng: 45.951274, name: 'McDonalds-56' },
+  { lat: 28.408354, lng: 45.967493, name: 'McDonalds-57' },
+  { lat: 28.446064, lng: 45.947303, name: 'McDonalds-58' },
+  { lat: 28.3580909999999, lng: 45.9620759999999, name: 'McDonalds-59' },
+  { lat: 26.2172439999999, lng: 44.062529, name: 'McDonalds-60' },
+  { lat: 26.422371, lng: 43.909334, name: 'McDonalds-61' },
+  { lat: 26.3465569999999, lng: 43.9778249999999, name: 'McDonalds-62' },
+  { lat: 26.36789, lng: 43.897019, name: 'McDonalds-63' },
+  { lat: 26.3641, lng: 43.936003, name: 'McDonalds-64' },
+  { lat: 26.394707, lng: 43.925714, name: 'McDonalds-65' },
+  { lat: 26.367704, lng: 43.96286, name: 'McDonalds-66' },
+  { lat: 26.091642, lng: 43.988462, name: 'McDonalds-67' },
+  { lat: 26.072658, lng: 43.982516, name: 'McDonalds-68' },
+  { lat: 26.3316151999999, lng: 43.9493736999999, name: 'McDonalds-69' },
+  { lat: 26.073249, lng: 44.02316, name: 'McDonalds-70' },
+  { lat: 26.37499, lng: 43.935874, name: 'McDonalds-71' },
+  { lat: 26.053521, lng: 44.9997539999999, name: 'McDonalds-72' },
+  { lat: 29.62397, lng: 43.512812, name: 'McDonalds-73' },
+  { lat: 27.572746, lng: 41.7307239999999, name: 'McDonalds-74' },
+  { lat: 27.2038029999999, lng: 42.48561, name: 'McDonalds-75' },
+  { lat: 27.550718, lng: 41.7000279999999, name: 'McDonalds-76' },
+  { lat: 27.486976, lng: 41.686295, name: 'McDonalds-77' },
+  { lat: 27.526189, lng: 41.6593079999999, name: 'McDonalds-78' },
+  { lat: 27.473753, lng: 41.6773029999999, name: 'McDonalds-79' },
+  { lat: 27.3760002, lng: 41.5516475, name: 'McDonalds-80' },
+  { lat: 27.4292269999999, lng: 41.59755, name: 'McDonalds-81' },
+  { lat: 27.8287509, lng: 41.5634695, name: 'McDonalds-82' },
+  { lat: 27.458077, lng: 41.65114, name: 'McDonalds-83' },
+  { lat: 30.982853, lng: 41.030713, name: 'McDonalds-84' },
+  { lat: 30.9924219999999, lng: 41.05126, name: 'McDonalds-85' },
+  { lat: 30.95448, lng: 41.014528, name: 'McDonalds-86' },
+  { lat: 31.6769839999999, lng: 38.6634419999999, name: 'McDonalds-87' },
+  { lat: 29.927584, lng: 40.192921, name: 'McDonalds-88' },
+  { lat: 29.959342, lng: 40.204659, name: 'McDonalds-89' },
+  { lat: 31.3144368, lng: 37.3592666, name: 'McDonalds-90' },
+  { lat: 28.3771630999999, lng: 36.5839755, name: 'McDonalds-91' },
+  { lat: 28.4049175999999, lng: 36.5457748, name: 'McDonalds-92' },
+  { lat: 28.4162383999999, lng: 36.5657373999999, name: 'McDonalds-93' },
+  { lat: 28.4284525, lng: 36.57407, name: 'McDonalds-94' },
+  { lat: 28.4295364999999, lng: 36.526281, name: 'McDonalds-95' },
+  { lat: 28.3798267, lng: 36.5125046, name: 'McDonalds-96' },
+  { lat: 25.0918694999999, lng: 37.2658567, name: 'McDonalds-97' },
+  { lat: 24.752256, lng: 46.720447, name: 'McDonalds-98' },
+  { lat: 24.761706, lng: 46.673578, name: 'McDonalds-99' },
+  { lat: 24.6766279999999, lng: 46.824129, name: 'McDonalds-100' },
+  { lat: 24.670413, lng: 46.727717, name: 'McDonalds-101' },
+  { lat: 24.745171, lng: 46.658687, name: 'McDonalds-102' },
+  { lat: 24.595997, lng: 46.6811189999999, name: 'McDonalds-103' },
+  { lat: 24.696858, lng: 46.703705, name: 'McDonalds-104' },
+  { lat: 24.7549919999999, lng: 46.655141, name: 'McDonalds-105' },
+  { lat: 24.6649709999999, lng: 46.677662, name: 'McDonalds-106' },
+  { lat: 24.688615, lng: 46.674158, name: 'McDonalds-107' },
+  { lat: 24.711986, lng: 46.6973239999999, name: 'McDonalds-108' },
+  { lat: 24.8509469999999, lng: 46.602847, name: 'McDonalds-109' },
+  { lat: 24.743084, lng: 46.6796189999999, name: 'McDonalds-110' },
+  { lat: 24.756608, lng: 46.741174, name: 'McDonalds-111' },
+  { lat: 24.6911089999999, lng: 46.763818, name: 'McDonalds-112' },
+  { lat: 24.8028349999999, lng: 46.794984, name: 'McDonalds-113' },
+  { lat: 24.569785, lng: 46.618454, name: 'McDonalds-114' },
+  { lat: 24.77525, lng: 46.617812, name: 'McDonalds-115' },
+  { lat: 24.686859, lng: 46.733883, name: 'McDonalds-116' },
+  { lat: 24.801954, lng: 46.60438, name: 'McDonalds-117' },
+  { lat: 25.86682, lng: 43.4903769999999, name: 'McDonalds-118' },
+  { lat: 26.306711, lng: 44.8263819999999, name: 'McDonalds-119' },
+  { lat: 26.316626, lng: 44.036361, name: 'McDonalds-120' },
+  { lat: 26.155804, lng: 43.7795099999999, name: 'McDonalds-121' },
+  { lat: 26.3867099999999, lng: 43.96356, name: 'McDonalds-122' },
+  { lat: 26.143461, lng: 43.651596, name: 'McDonalds-123' },
+  { lat: 25.8695266, lng: 43.5192733999999, name: 'McDonalds-124' },
+  { lat: 24.476011, lng: 46.286331, name: 'McDonalds-125' },
+  { lat: 25.713427, lng: 45.610516, name: 'McDonalds-126' },
+  { lat: 24.4839047999999, lng: 46.3222137, name: 'McDonalds-127' },
+  { lat: 24.805646, lng: 46.428584, name: 'McDonalds-128' },
+  { lat: 25.897498, lng: 45.34993, name: 'McDonalds-129' },
+  { lat: 24.647976, lng: 46.499598, name: 'McDonalds-130' },
+  { lat: 24.6195539999999, lng: 46.507895, name: 'McDonalds-131' },
+  { lat: 24.5076629999999, lng: 44.396131, name: 'McDonalds-132' },
+  { lat: 25.236649, lng: 45.2575019999999, name: 'McDonalds-133' },
+  { lat: 25.1234599999999, lng: 47.509885, name: 'McDonalds-134' },
+  { lat: 24.7609539999999, lng: 46.695496, name: 'McDonalds-135' },
+  { lat: 24.7832309999999, lng: 46.6980159999999, name: 'McDonalds-136' },
+  { lat: 24.794238, lng: 46.6557279999999, name: 'McDonalds-137' },
+  { lat: 24.7901959999999, lng: 46.63337, name: 'McDonalds-138' },
+  { lat: 24.800724, lng: 46.674017, name: 'McDonalds-139' },
+  { lat: 24.776301, lng: 46.777346, name: 'McDonalds-140' },
+  { lat: 24.776524, lng: 46.729723, name: 'McDonalds-141' },
+  { lat: 24.768501, lng: 46.6050709999999, name: 'McDonalds-142' },
+  { lat: 24.817342, lng: 46.732392, name: 'McDonalds-143' },
+  { lat: 24.8238029999999, lng: 46.656022, name: 'McDonalds-144' },
+  { lat: 24.811676, lng: 46.7694799999999, name: 'McDonalds-145' },
+  { lat: 24.8057789999999, lng: 46.6933749999999, name: 'McDonalds-146' },
+  { lat: 24.962283, lng: 46.7011089999999, name: 'McDonalds-147' },
+  { lat: 24.809897, lng: 46.809348, name: 'McDonalds-148' },
+  { lat: 24.884814, lng: 46.609882, name: 'McDonalds-149' },
+  { lat: 24.8456759999999, lng: 46.75889, name: 'McDonalds-150' },
+  { lat: 24.799799, lng: 46.741202, name: 'McDonalds-151' },
+  { lat: 24.816, lng: 46.637267, name: 'McDonalds-152' },
+  { lat: 24.840678, lng: 46.8289989999999, name: 'McDonalds-153' },
+  { lat: 24.798405, lng: 46.856894, name: 'McDonalds-154' },
+  { lat: 24.889567, lng: 46.693315, name: 'McDonalds-155' },
+  { lat: 24.8265627, lng: 46.5919613, name: 'McDonalds-156' },
+  { lat: 24.732704, lng: 46.676905, name: 'McDonalds-157' },
+  { lat: 24.896684, lng: 46.907277, name: 'McDonalds-158' },
+  { lat: 24.813681, lng: 46.8785419999999, name: 'McDonalds-159' },
+  { lat: 25.3199869999999, lng: 49.554063, name: 'McDonalds-160' },
+  { lat: 25.446396, lng: 49.5814449999999, name: 'McDonalds-161' },
+  { lat: 25.344768, lng: 49.5898009999999, name: 'McDonalds-162' },
+  { lat: 25.391841, lng: 49.561702, name: 'McDonalds-163' },
+  { lat: 25.330395, lng: 49.550283, name: 'McDonalds-164' },
+  { lat: 25.345558, lng: 49.614022, name: 'McDonalds-165' },
+  { lat: 25.399372, lng: 49.578294, name: 'McDonalds-166' },
+  { lat: 25.359454, lng: 49.548103, name: 'McDonalds-167' },
+  { lat: 25.420119, lng: 49.5746429999999, name: 'McDonalds-168' },
+  { lat: 25.811239, lng: 49.5677139999999, name: 'McDonalds-169' },
+  { lat: 26.153267, lng: 49.437352, name: 'McDonalds-170' },
+  { lat: 25.9235559999999, lng: 49.658063, name: 'McDonalds-171' },
+  { lat: 25.883798, lng: 48.923553, name: 'McDonalds-172' },
+  { lat: 24.158022, lng: 47.324911, name: 'McDonalds-173' },
+  { lat: 24.156352, lng: 47.3511029999999, name: 'McDonalds-174' },
+  { lat: 24.138706, lng: 47.2793719999999, name: 'McDonalds-175' },
+  { lat: 24.374664, lng: 47.1003119999999, name: 'McDonalds-176' },
   { lat: 23.4872515, lng: 46.8787137, name: 'McDonalds-177' },
-  { lat: 23.904321, lng: 42.913928, name: 'McDonalds-288' },
   { lat: 23.998901, lng: 47.138743, name: 'McDonalds-178' },
+  { lat: 24.6047969999999, lng: 46.731805, name: 'McDonalds-179' },
+  { lat: 24.570255, lng: 46.691384, name: 'McDonalds-180' },
+  { lat: 24.553404, lng: 46.8887499999999, name: 'McDonalds-181' },
+  { lat: 24.56834, lng: 46.771304, name: 'McDonalds-182' },
+  { lat: 24.585652, lng: 46.778468, name: 'McDonalds-183' },
+  { lat: 24.532769, lng: 46.697202, name: 'McDonalds-184' },
+  { lat: 24.5581669999999, lng: 46.7051449999999, name: 'McDonalds-185' },
+  { lat: 24.4616693999999, lng: 46.8118218, name: 'McDonalds-186' },
+  { lat: 24.5785078, lng: 46.8297301, name: 'McDonalds-187' },
+  { lat: 24.537533, lng: 46.657906, name: 'McDonalds-188' },
+  { lat: 24.4946719999999, lng: 46.62753, name: 'McDonalds-189' },
+  { lat: 24.624163, lng: 46.686824, name: 'McDonalds-190' },
+  { lat: 24.5591932, lng: 46.7931871, name: 'McDonalds-191' },
+  { lat: 24.588635, lng: 46.623655, name: 'McDonalds-192' },
+  { lat: 24.740969, lng: 46.683918, name: 'McDonalds-193' },
+  { lat: 24.753345, lng: 46.769497, name: 'McDonalds-194' },
+  { lat: 24.7789629999999, lng: 46.7081079999999, name: 'McDonalds-195' },
+  { lat: 24.7772337, lng: 46.8236355999999, name: 'McDonalds-196' },
+  { lat: 24.761951, lng: 46.798997, name: 'McDonalds-197' },
+  { lat: 24.781226, lng: 46.730709, name: 'McDonalds-198' },
+  { lat: 24.774057, lng: 46.776218, name: 'McDonalds-199' },
+  { lat: 24.767761, lng: 46.715589, name: 'McDonalds-200' },
+  { lat: 24.829556, lng: 46.7278789999999, name: 'McDonalds-201' },
+  { lat: 24.8210257999999, lng: 46.8322609, name: 'McDonalds-202' },
+  { lat: 24.834256, lng: 46.809444, name: 'McDonalds-203' },
+  { lat: 24.743031, lng: 46.808578, name: 'McDonalds-204' },
+  { lat: 24.728281, lng: 46.782714, name: 'McDonalds-205' },
+  { lat: 24.674518, lng: 46.6680659999999, name: 'McDonalds-206' },
+  { lat: 24.683756, lng: 46.652378, name: 'McDonalds-207' },
+  { lat: 24.6670689999999, lng: 46.7834688, name: 'McDonalds-208' },
+  { lat: 24.68655, lng: 46.795266, name: 'McDonalds-209' },
+  { lat: 24.621367, lng: 46.7477389999999, name: 'McDonalds-210' },
+  { lat: 24.5753299999999, lng: 46.662859, name: 'McDonalds-211' },
+  { lat: 24.5579009999999, lng: 46.637203, name: 'McDonalds-212' },
+  { lat: 24.601027, lng: 46.6985649999999, name: 'McDonalds-213' },
+  { lat: 24.5987659999999, lng: 46.640038, name: 'McDonalds-214' },
+  { lat: 24.5679859999999, lng: 46.5451709999999, name: 'McDonalds-215' },
+  { lat: 24.5543239999999, lng: 46.5544839999999, name: 'McDonalds-216' },
+  { lat: 24.5780879999999, lng: 46.586062, name: 'McDonalds-217' },
+  { lat: 24.7136095999999, lng: 46.6725044999999, name: 'McDonalds-218' },
+  { lat: 24.850728, lng: 46.672943, name: 'McDonalds-219' },
+  { lat: 24.834947, lng: 46.682427, name: 'McDonalds-220' },
+  { lat: 24.8890919999999, lng: 46.696897, name: 'McDonalds-221' },
+  { lat: 24.8612596, lng: 46.6445846999999, name: 'McDonalds-222' },
+  { lat: 29.9751718, lng: 40.2232644, name: 'McDonalds-223' },
+  { lat: 24.1042229999999, lng: 38.0301229999999, name: 'McDonalds-224' },
   { lat: 24.0058729999999, lng: 38.218098, name: 'McDonalds-225' },
   { lat: 24.00708, lng: 38.15839, name: 'McDonalds-226' },
   { lat: 24.0340791, lng: 38.1936264, name: 'McDonalds-227' },
+  { lat: 21.6901854, lng: 39.1102568999999, name: 'McDonalds-228' },
+  { lat: 21.5103002, lng: 39.1866378, name: 'McDonalds-229' },
+  { lat: 21.595743, lng: 39.154831, name: 'McDonalds-230' },
+  { lat: 21.6701811, lng: 39.1696477, name: 'McDonalds-231' },
+  { lat: 21.6585234999999, lng: 39.1234403, name: 'McDonalds-232' },
+  { lat: 21.5341564999999, lng: 39.2026389, name: 'McDonalds-233' },
+  { lat: 21.6067231999999, lng: 39.1240854, name: 'McDonalds-234' },
+  { lat: 21.450863, lng: 39.255592, name: 'McDonalds-235' },
+  { lat: 21.5765709999999, lng: 39.1508173, name: 'McDonalds-236' },
+  { lat: 21.6139987, lng: 39.1541006, name: 'McDonalds-237' },
+  { lat: 21.5931504, lng: 39.1858244999999, name: 'McDonalds-238' },
+  { lat: 21.5163028, lng: 39.1543531, name: 'McDonalds-239' },
+  { lat: 21.603509, lng: 39.2390298, name: 'McDonalds-240' },
+  { lat: 21.5268429, lng: 39.1758899, name: 'McDonalds-241' },
+  { lat: 21.5532391, lng: 39.2147444, name: 'McDonalds-242' },
+  { lat: 21.4639219, lng: 39.2404024, name: 'McDonalds-243' },
+  { lat: 21.5781302999999, lng: 39.2188468, name: 'McDonalds-244' },
+  { lat: 21.5883708, lng: 39.131732, name: 'McDonalds-245' },
+  { lat: 21.5597709999999, lng: 39.1328229999999, name: 'McDonalds-246' },
+  { lat: 21.7861773, lng: 39.2025873, name: 'McDonalds-247' },
+  { lat: 21.7937542, lng: 39.1328222, name: 'McDonalds-248' },
+  { lat: 21.7719229, lng: 39.1000843, name: 'McDonalds-249' },
+  { lat: 21.55517, lng: 39.7743, name: 'McDonalds-250' },
+  { lat: 21.3933848999999, lng: 39.7969742, name: 'McDonalds-251' },
+  { lat: 21.4403211, lng: 39.7971992, name: 'McDonalds-252' },
+  { lat: 21.4256364, lng: 39.7903333, name: 'McDonalds-253' },
+  { lat: 21.3764149999999, lng: 39.796945, name: 'McDonalds-254' },
+  { lat: 21.4466149999999, lng: 39.8620355, name: 'McDonalds-255' },
+  { lat: 21.349474, lng: 39.905294, name: 'McDonalds-256' },
+  { lat: 21.4194832, lng: 39.8243351, name: 'McDonalds-257' },
+  { lat: 21.3611064999999, lng: 39.8229237, name: 'McDonalds-258' },
+  { lat: 21.337563, lng: 39.678844, name: 'McDonalds-259' },
+  { lat: 21.3906089999999, lng: 39.884464, name: 'McDonalds-260' },
+  { lat: 21.3552791, lng: 40.1142519, name: 'McDonalds-261' },
+  { lat: 21.4847099, lng: 39.9411100999999, name: 'McDonalds-262' },
+  { lat: 21.4080156, lng: 39.783881, name: 'McDonalds-263' },
+  { lat: 21.4603912999999, lng: 39.9488886, name: 'McDonalds-264' },
+  { lat: 21.3899975999999, lng: 39.7054587, name: 'McDonalds-265' },
+  { lat: 21.4478747999999, lng: 39.8076973, name: 'McDonalds-266' },
+  { lat: 21.4502916999999, lng: 39.7624451, name: 'McDonalds-267' },
+  { lat: 21.3607624, lng: 39.9005564, name: 'McDonalds-268' },
+  { lat: 21.3736536, lng: 39.8040199, name: 'McDonalds-269' },
+  { lat: 21.2475529, lng: 40.4145156, name: 'McDonalds-270' },
+  { lat: 21.3550155, lng: 40.4272322, name: 'McDonalds-271' },
+  { lat: 21.2271933999999, lng: 40.4115943, name: 'McDonalds-272' },
+  { lat: 21.2828102999999, lng: 40.4037179, name: 'McDonalds-273' },
+  { lat: 21.2961267, lng: 40.4267184, name: 'McDonalds-274' },
+  { lat: 21.2961513, lng: 40.4178345, name: 'McDonalds-275' },
+  { lat: 21.2868888999999, lng: 40.4189676999999, name: 'McDonalds-276' },
+  { lat: 21.355802, lng: 40.4498147, name: 'McDonalds-277' },
+  { lat: 21.2830816, lng: 40.4448979999999, name: 'McDonalds-278' },
+  { lat: 21.2768502, lng: 40.4461425, name: 'McDonalds-279' },
+  { lat: 21.4216767, lng: 40.4952266999999, name: 'McDonalds-280' },
+  { lat: 21.5019916, lng: 40.4904688999999, name: 'McDonalds-281' },
+  { lat: 24.4893404, lng: 39.5824095, name: 'McDonalds-282' },
+  { lat: 24.469343, lng: 39.6344984, name: 'McDonalds-283' },
+  { lat: 23.417661, lng: 44.028782, name: 'McDonalds-284' },
+  { lat: 24.4468532999999, lng: 39.6187762, name: 'McDonalds-285' },
+  { lat: 24.4826762, lng: 39.6431209, name: 'McDonalds-286' },
   { lat: 24.084093, lng: 45.325285, name: 'McDonalds-287' },
-  { lat: 24.1042229999999, lng: 38.0301229999999, name: 'McDonalds-224' },
+  { lat: 23.904321, lng: 42.913928, name: 'McDonalds-288' },
+  { lat: 24.713222, lng: 46.794646, name: 'McDonalds-289' },
   { lat: 24.1241193999999, lng: 47.2694975, name: 'McDonalds-290' },
-  { lat: 24.138706, lng: 47.2793719999999, name: 'McDonalds-175' },
-  { lat: 24.156352, lng: 47.3511029999999, name: 'McDonalds-174' },
-  { lat: 24.158022, lng: 47.324911, name: 'McDonalds-173' },
-  { lat: 24.374664, lng: 47.1003119999999, name: 'McDonalds-176' },
+  { lat: 22.302252, lng: 46.731567, name: 'McDonalds-291' },
+  { lat: 20.472208, lng: 44.784113, name: 'McDonalds-292' },
+  { lat: 17.563802, lng: 44.2289369999999, name: 'McDonalds-293' },
+  { lat: 17.5064226999999, lng: 44.1879596, name: 'McDonalds-294' },
+  { lat: 17.6449106, lng: 44.4662514, name: 'McDonalds-295' },
+  { lat: 16.6054031999999, lng: 42.9377139, name: 'McDonalds-296' },
+  { lat: 16.9602982, lng: 42.8204752, name: 'McDonalds-297' },
+  { lat: 16.6054031999999, lng: 42.9377139, name: 'McDonalds-298' },
+  { lat: 16.907363, lng: 42.544032, name: 'McDonalds-299' },
+  { lat: 16.9306075, lng: 42.5494135, name: 'McDonalds-300' },
+  { lat: 17.1702791, lng: 42.6470374999999, name: 'McDonalds-301' },
+  { lat: 17.7379654, lng: 42.2716887, name: 'McDonalds-302' },
+  { lat: 16.902064, lng: 42.5539689999999, name: 'McDonalds-303' },
+  { lat: 18.2309955, lng: 42.55302, name: 'McDonalds-304' },
+  { lat: 18.2306454999999, lng: 42.4896417, name: 'McDonalds-305' },
+  { lat: 18.2340064, lng: 42.6581425, name: 'McDonalds-306' },
+  { lat: 18.1845298, lng: 42.8264907, name: 'McDonalds-307' },
+  { lat: 18.2379012, lng: 42.5802317, name: 'McDonalds-308' },
+  { lat: 18.2455472, lng: 42.7653755, name: 'McDonalds-309' },
+  { lat: 18.2905458999999, lng: 42.7436376, name: 'McDonalds-310' },
+  { lat: 18.2752841, lng: 42.7202578, name: 'McDonalds-311' },
+  { lat: 18.5437519999999, lng: 42.037272, name: 'McDonalds-312' },
+  { lat: 19.1207425, lng: 41.0978361999999, name: 'McDonalds-313' },
+  { lat: 20.0181942, lng: 41.4735602999999, name: 'McDonalds-314' },
+  { lat: 19.9882180999999, lng: 42.6006245999999, name: 'McDonalds-315' },
+  { lat: 19.8755624999999, lng: 41.5734375, name: 'McDonalds-316' },
+  { lat: 24.4737550999999, lng: 39.6086127999999, name: 'McDonalds-317' },
+  { lat: 24.4531957, lng: 39.6880436, name: 'McDonalds-318' },
+  { lat: 24.4713238999999, lng: 39.6107671, name: 'McDonalds-319' },
+  { lat: 24.4888230999999, lng: 39.7088861, name: 'McDonalds-320' },
+  { lat: 24.4220296, lng: 39.5815890999999, name: 'McDonalds-321' },
+  { lat: 24.4396409999999, lng: 39.6626244, name: 'McDonalds-322' },
+  { lat: 24.4220942999999, lng: 39.6361087, name: 'McDonalds-323' },
+  { lat: 22.8014276999999, lng: 39.050275, name: 'McDonalds-324' },
+  { lat: 26.332224, lng: 50.0900879999999, name: 'McDonalds-325' },
+  { lat: 24.4478078999999, lng: 39.5419209, name: 'McDonalds-326' },
+  { lat: 24.553884, lng: 39.7157119999999, name: 'McDonalds-327' },
+  { lat: 24.4868481, lng: 39.649173, name: 'McDonalds-328' },
+  { lat: 24.4714715, lng: 39.6120097, name: 'McDonalds-329' },
+  { lat: 24.4959481999999, lng: 39.5964722999999, name: 'McDonalds-330' },
   { lat: 24.3896856, lng: 39.6136015999999, name: 'McDonalds-331' },
   { lat: 24.413635, lng: 39.618942, name: 'McDonalds-332' },
-  { lat: 24.4220296, lng: 39.5815890999999, name: 'McDonalds-321' },
-  { lat: 24.4220942999999, lng: 39.6361087, name: 'McDonalds-323' },
-  { lat: 24.4396409999999, lng: 39.6626244, name: 'McDonalds-322' },
-  { lat: 24.4468532999999, lng: 39.6187762, name: 'McDonalds-285' },
-  { lat: 24.4478078999999, lng: 39.5419209, name: 'McDonalds-326' },
   { lat: 24.4483441999999, lng: 39.5313138, name: 'McDonalds-333' },
-  { lat: 24.4531957, lng: 39.6880436, name: 'McDonalds-318' },
-  { lat: 24.4616693999999, lng: 46.8118218, name: 'McDonalds-186' },
-  { lat: 24.469343, lng: 39.6344984, name: 'McDonalds-283' },
-  { lat: 24.4713238999999, lng: 39.6107671, name: 'McDonalds-319' },
-  { lat: 24.4714715, lng: 39.6120097, name: 'McDonalds-329' },
-  { lat: 24.4737550999999, lng: 39.6086127999999, name: 'McDonalds-317' },
-  { lat: 24.476011, lng: 46.286331, name: 'McDonalds-125' },
-  { lat: 24.4826762, lng: 39.6431209, name: 'McDonalds-286' },
-  { lat: 24.4839047999999, lng: 46.3222137, name: 'McDonalds-127' },
-  { lat: 24.4868481, lng: 39.649173, name: 'McDonalds-328' },
-  { lat: 24.4888230999999, lng: 39.7088861, name: 'McDonalds-320' },
-  { lat: 24.4893404, lng: 39.5824095, name: 'McDonalds-282' },
-  { lat: 24.4946719999999, lng: 46.62753, name: 'McDonalds-189' },
-  { lat: 24.4959481999999, lng: 39.5964722999999, name: 'McDonalds-330' },
-  { lat: 24.5076629999999, lng: 44.396131, name: 'McDonalds-132' },
-  { lat: 24.532769, lng: 46.697202, name: 'McDonalds-184' },
-  { lat: 24.537533, lng: 46.657906, name: 'McDonalds-188' },
-  { lat: 24.553404, lng: 46.8887499999999, name: 'McDonalds-181' },
-  { lat: 24.553884, lng: 39.7157119999999, name: 'McDonalds-327' },
-  { lat: 24.5543239999999, lng: 46.5544839999999, name: 'McDonalds-216' },
-  { lat: 24.5579009999999, lng: 46.637203, name: 'McDonalds-212' },
-  { lat: 24.5581669999999, lng: 46.7051449999999, name: 'McDonalds-185' },
-  { lat: 24.5591932, lng: 46.7931871, name: 'McDonalds-191' },
-  { lat: 24.5679859999999, lng: 46.5451709999999, name: 'McDonalds-215' },
-  { lat: 24.56834, lng: 46.771304, name: 'McDonalds-182' },
-  { lat: 24.569785, lng: 46.618454, name: 'McDonalds-114' },
-  { lat: 24.570255, lng: 46.691384, name: 'McDonalds-180' },
-  { lat: 24.5753299999999, lng: 46.662859, name: 'McDonalds-211' },
-  { lat: 24.5780879999999, lng: 46.586062, name: 'McDonalds-217' },
-  { lat: 24.5785078, lng: 46.8297301, name: 'McDonalds-187' },
-  { lat: 24.585652, lng: 46.778468, name: 'McDonalds-183' },
-  { lat: 24.588635, lng: 46.623655, name: 'McDonalds-192' },
-  { lat: 24.595997, lng: 46.6811189999999, name: 'McDonalds-103' },
-  { lat: 24.5987659999999, lng: 46.640038, name: 'McDonalds-214' },
-  { lat: 24.601027, lng: 46.6985649999999, name: 'McDonalds-213' },
-  { lat: 24.6047969999999, lng: 46.731805, name: 'McDonalds-179' },
-  { lat: 24.6195539999999, lng: 46.507895, name: 'McDonalds-131' },
-  { lat: 24.621367, lng: 46.7477389999999, name: 'McDonalds-210' },
-  { lat: 24.624163, lng: 46.686824, name: 'McDonalds-190' },
-  { lat: 24.647976, lng: 46.499598, name: 'McDonalds-130' },
-  { lat: 24.6649709999999, lng: 46.677662, name: 'McDonalds-106' },
-  { lat: 24.6670689999999, lng: 46.7834688, name: 'McDonalds-208' },
-  { lat: 24.670413, lng: 46.727717, name: 'McDonalds-101' },
-  { lat: 24.674518, lng: 46.6680659999999, name: 'McDonalds-206' },
-  { lat: 24.6766279999999, lng: 46.824129, name: 'McDonalds-100' },
-  { lat: 24.683756, lng: 46.652378, name: 'McDonalds-207' },
-  { lat: 24.68655, lng: 46.795266, name: 'McDonalds-209' },
-  { lat: 24.686859, lng: 46.733883, name: 'McDonalds-116' },
-  { lat: 24.688615, lng: 46.674158, name: 'McDonalds-107' },
-  { lat: 24.6911089999999, lng: 46.763818, name: 'McDonalds-112' },
-  { lat: 24.696858, lng: 46.703705, name: 'McDonalds-104' },
-  { lat: 24.711986, lng: 46.6973239999999, name: 'McDonalds-108' },
-  { lat: 24.713222, lng: 46.794646, name: 'McDonalds-289' },
-  { lat: 24.7136095999999, lng: 46.6725044999999, name: 'McDonalds-218' },
-  { lat: 24.728281, lng: 46.782714, name: 'McDonalds-205' },
-  { lat: 24.732704, lng: 46.676905, name: 'McDonalds-157' },
-  { lat: 24.740969, lng: 46.683918, name: 'McDonalds-193' },
-  { lat: 24.743031, lng: 46.808578, name: 'McDonalds-204' },
-  { lat: 24.743084, lng: 46.6796189999999, name: 'McDonalds-110' },
-  { lat: 24.745171, lng: 46.658687, name: 'McDonalds-102' },
-  { lat: 24.752256, lng: 46.720447, name: 'McDonalds-98' },
-  { lat: 24.753345, lng: 46.769497, name: 'McDonalds-194' },
-  { lat: 24.7549919999999, lng: 46.655141, name: 'McDonalds-105' },
-  { lat: 24.756608, lng: 46.741174, name: 'McDonalds-111' },
-  { lat: 24.7609539999999, lng: 46.695496, name: 'McDonalds-135' },
-  { lat: 24.761706, lng: 46.673578, name: 'McDonalds-99' },
-  { lat: 24.761951, lng: 46.798997, name: 'McDonalds-197' },
-  { lat: 24.767761, lng: 46.715589, name: 'McDonalds-200' },
-  { lat: 24.768501, lng: 46.6050709999999, name: 'McDonalds-142' },
-  { lat: 24.774057, lng: 46.776218, name: 'McDonalds-199' },
-  { lat: 24.77525, lng: 46.617812, name: 'McDonalds-115' },
-  { lat: 24.776301, lng: 46.777346, name: 'McDonalds-140' },
-  { lat: 24.776524, lng: 46.729723, name: 'McDonalds-141' },
-  { lat: 24.7772337, lng: 46.8236355999999, name: 'McDonalds-196' },
-  { lat: 24.7789629999999, lng: 46.7081079999999, name: 'McDonalds-195' },
-  { lat: 24.781226, lng: 46.730709, name: 'McDonalds-198' },
-  { lat: 24.7832309999999, lng: 46.6980159999999, name: 'McDonalds-136' },
-  { lat: 24.7901959999999, lng: 46.63337, name: 'McDonalds-138' },
-  { lat: 24.794238, lng: 46.6557279999999, name: 'McDonalds-137' },
-  { lat: 24.798405, lng: 46.856894, name: 'McDonalds-154' },
-  { lat: 24.799799, lng: 46.741202, name: 'McDonalds-151' },
-  { lat: 24.800724, lng: 46.674017, name: 'McDonalds-139' },
-  { lat: 24.801954, lng: 46.60438, name: 'McDonalds-117' },
-  { lat: 24.8028349999999, lng: 46.794984, name: 'McDonalds-113' },
-  { lat: 24.805646, lng: 46.428584, name: 'McDonalds-128' },
-  { lat: 24.8057789999999, lng: 46.6933749999999, name: 'McDonalds-146' },
-  { lat: 24.809897, lng: 46.809348, name: 'McDonalds-148' },
-  { lat: 24.811676, lng: 46.7694799999999, name: 'McDonalds-145' },
-  { lat: 24.813681, lng: 46.8785419999999, name: 'McDonalds-159' },
-  { lat: 24.816, lng: 46.637267, name: 'McDonalds-152' },
-  { lat: 24.817342, lng: 46.732392, name: 'McDonalds-143' },
-  { lat: 24.8210257999999, lng: 46.8322609, name: 'McDonalds-202' },
-  { lat: 24.8238029999999, lng: 46.656022, name: 'McDonalds-144' },
-  { lat: 24.8265627, lng: 46.5919613, name: 'McDonalds-156' },
-  { lat: 24.829556, lng: 46.7278789999999, name: 'McDonalds-201' },
-  { lat: 24.834256, lng: 46.809444, name: 'McDonalds-203' },
-  { lat: 24.834947, lng: 46.682427, name: 'McDonalds-220' },
-  { lat: 24.840678, lng: 46.8289989999999, name: 'McDonalds-153' },
-  { lat: 24.8456759999999, lng: 46.75889, name: 'McDonalds-150' },
-  { lat: 24.850728, lng: 46.672943, name: 'McDonalds-219' },
-  { lat: 24.8509469999999, lng: 46.602847, name: 'McDonalds-109' },
-  { lat: 24.8612596, lng: 46.6445846999999, name: 'McDonalds-222' },
-  { lat: 24.884814, lng: 46.609882, name: 'McDonalds-149' },
-  { lat: 24.8890919999999, lng: 46.696897, name: 'McDonalds-221' },
-  { lat: 24.889567, lng: 46.693315, name: 'McDonalds-155' },
-  { lat: 24.896684, lng: 46.907277, name: 'McDonalds-158' },
-  { lat: 24.962283, lng: 46.7011089999999, name: 'McDonalds-147' },
-  { lat: 25.0918694999999, lng: 37.2658567, name: 'McDonalds-97' },
-  { lat: 25.1234599999999, lng: 47.509885, name: 'McDonalds-134' },
-  { lat: 25.236649, lng: 45.2575019999999, name: 'McDonalds-133' },
-  { lat: 25.3199869999999, lng: 49.554063, name: 'McDonalds-160' },
-  { lat: 25.330395, lng: 49.550283, name: 'McDonalds-164' },
-  { lat: 25.344768, lng: 49.5898009999999, name: 'McDonalds-162' },
-  { lat: 25.345558, lng: 49.614022, name: 'McDonalds-165' },
-  { lat: 25.359454, lng: 49.548103, name: 'McDonalds-167' },
-  { lat: 25.391841, lng: 49.561702, name: 'McDonalds-163' },
-  { lat: 25.399372, lng: 49.578294, name: 'McDonalds-166' },
-  { lat: 25.420119, lng: 49.5746429999999, name: 'McDonalds-168' },
-  { lat: 25.446396, lng: 49.5814449999999, name: 'McDonalds-161' },
-  { lat: 25.713427, lng: 45.610516, name: 'McDonalds-126' },
-  { lat: 25.811239, lng: 49.5677139999999, name: 'McDonalds-169' },
-  { lat: 25.86682, lng: 43.4903769999999, name: 'McDonalds-118' },
-  { lat: 25.8695266, lng: 43.5192733999999, name: 'McDonalds-124' },
-  { lat: 25.883798, lng: 48.923553, name: 'McDonalds-172' },
-  { lat: 25.897498, lng: 45.34993, name: 'McDonalds-129' },
-  { lat: 25.9235559999999, lng: 49.658063, name: 'McDonalds-171' },
-  { lat: 26.053521, lng: 44.9997539999999, name: 'McDonalds-72' },
-  { lat: 26.072658, lng: 43.982516, name: 'McDonalds-68' },
-  { lat: 26.073249, lng: 44.02316, name: 'McDonalds-70' },
-  { lat: 26.091642, lng: 43.988462, name: 'McDonalds-67' },
-  { lat: 26.143461, lng: 43.651596, name: 'McDonalds-123' },
-  { lat: 26.153267, lng: 49.437352, name: 'McDonalds-170' },
-  { lat: 26.1547649999999, lng: 50.161443, name: 'McDonalds-30' },
-  { lat: 26.155804, lng: 43.7795099999999, name: 'McDonalds-121' },
-  { lat: 26.168801, lng: 49.9244939999999, name: 'McDonalds-38' },
-  { lat: 26.191461, lng: 50.1900539999999, name: 'McDonalds-28' },
-  { lat: 26.2172439999999, lng: 44.062529, name: 'McDonalds-60' },
-  { lat: 26.234557, lng: 49.988319, name: 'McDonalds-23' },
-  { lat: 26.2654423, lng: 50.0705652, name: 'McDonalds-36' },
-  { lat: 26.2665769999999, lng: 50.212969, name: 'McDonalds-27' },
-  { lat: 26.28333, lng: 50.1979629999999, name: 'McDonalds-25' },
-  { lat: 26.286029, lng: 50.220368, name: 'McDonalds-24' },
-  { lat: 26.290136, lng: 50.181503, name: 'McDonalds-31' },
-  { lat: 26.2942359999999, lng: 50.207408, name: 'McDonalds-32' },
-  { lat: 26.3045239999999, lng: 50.170058, name: 'McDonalds-34' },
-  { lat: 26.305235, lng: 50.1963189999999, name: 'McDonalds-26' },
-  { lat: 26.306711, lng: 44.8263819999999, name: 'McDonalds-119' },
-  { lat: 26.314404, lng: 50.1474989999999, name: 'McDonalds-20' },
-  { lat: 26.316626, lng: 44.036361, name: 'McDonalds-120' },
-  { lat: 26.329109, lng: 50.2135759999999, name: 'McDonalds-35' },
-  { lat: 26.3316151999999, lng: 43.9493736999999, name: 'McDonalds-69' },
-  { lat: 26.33201, lng: 50.151145, name: 'McDonalds-18' },
-  { lat: 26.332224, lng: 50.0900879999999, name: 'McDonalds-325' },
-  { lat: 26.343225, lng: 50.000093, name: 'McDonalds-33' },
-  { lat: 26.3465569999999, lng: 43.9778249999999, name: 'McDonalds-62' },
-  { lat: 26.34987, lng: 49.969378, name: 'McDonalds-29' },
-  { lat: 26.349902, lng: 50.0517819999999, name: 'McDonalds-11' },
-  { lat: 26.350703, lng: 50.017973, name: 'McDonalds-15' },
-  { lat: 26.359828, lng: 50.189654, name: 'McDonalds-12' },
-  { lat: 26.3641, lng: 43.936003, name: 'McDonalds-64' },
-  { lat: 26.365381, lng: 50.0472143, name: 'McDonalds-22' },
-  { lat: 26.366403, lng: 50.069747, name: 'McDonalds-13' },
-  { lat: 26.367704, lng: 43.96286, name: 'McDonalds-66' },
-  { lat: 26.36789, lng: 43.897019, name: 'McDonalds-63' },
-  { lat: 26.37499, lng: 43.935874, name: 'McDonalds-71' },
-  { lat: 26.380277, lng: 50.0116019999999, name: 'McDonalds-17' },
-  { lat: 26.3867099999999, lng: 43.96356, name: 'McDonalds-122' },
-  { lat: 26.394707, lng: 43.925714, name: 'McDonalds-65' },
-  { lat: 26.399303, lng: 50.075584, name: 'McDonalds-8' },
-  { lat: 26.400232, lng: 50.117458, name: 'McDonalds-14' },
-  { lat: 26.404125, lng: 50.057959, name: 'McDonalds-9' },
-  { lat: 26.4044399999999, lng: 50.03745, name: 'McDonalds-21' },
-  { lat: 26.4151059999999, lng: 50.0769979999999, name: 'McDonalds-10' },
-  { lat: 26.4156099999999, lng: 50.108993, name: 'McDonalds-7' },
-  { lat: 26.422371, lng: 43.909334, name: 'McDonalds-61' },
-  { lat: 26.423391, lng: 50.029582, name: 'McDonalds-16' },
-  { lat: 26.4345909999999, lng: 50.085498, name: 'McDonalds-4' },
-  { lat: 26.442628, lng: 50.118421, name: 'McDonalds-3' },
-  { lat: 26.4427509999999, lng: 50.065962, name: 'McDonalds-6' },
-  { lat: 26.4594469999999, lng: 50.0919899999999, name: 'McDonalds-2' },
-  { lat: 26.4621949999999, lng: 50.113661, name: 'McDonalds-1' },
-  { lat: 26.468621, lng: 49.797058, name: 'McDonalds-40' },
-  { lat: 26.469011, lng: 50.0598819999999, name: 'McDonalds-5' },
-  { lat: 26.706317, lng: 50.05327, name: 'McDonalds-39' },
-  { lat: 26.7886149, lng: 49.8462676, name: 'McDonalds-41' },
-  { lat: 26.8350108, lng: 49.5619778999999, name: 'McDonalds-46' },
-  { lat: 26.9285529999999, lng: 49.7037799999999, name: 'McDonalds-43' },
-  { lat: 26.996702, lng: 49.6606029999999, name: 'McDonalds-45' },
-  { lat: 27.0041759999999, lng: 49.659997, name: 'McDonalds-44' },
-  { lat: 27.011953, lng: 49.642519, name: 'McDonalds-42' },
-  { lat: 27.136457, lng: 49.5684789999999, name: 'McDonalds-49' },
-  { lat: 27.1381327999999, lng: 49.5662777999999, name: 'McDonalds-47' },
-  { lat: 27.156212, lng: 49.5410459999999, name: 'McDonalds-48' },
-  { lat: 27.2038029999999, lng: 42.48561, name: 'McDonalds-75' },
-  { lat: 27.2535229999999, lng: 49.015926, name: 'McDonalds-50' },
-  { lat: 27.3760002, lng: 41.5516475, name: 'McDonalds-80' },
-  { lat: 27.4292269999999, lng: 41.59755, name: 'McDonalds-81' },
-  { lat: 27.458077, lng: 41.65114, name: 'McDonalds-83' },
-  { lat: 27.4732089999999, lng: 48.4885249999999, name: 'McDonalds-51' },
-  { lat: 27.473753, lng: 41.6773029999999, name: 'McDonalds-79' },
-  { lat: 27.486976, lng: 41.686295, name: 'McDonalds-77' },
-  { lat: 27.526189, lng: 41.6593079999999, name: 'McDonalds-78' },
-  { lat: 27.550718, lng: 41.7000279999999, name: 'McDonalds-76' },
-  { lat: 27.572746, lng: 41.7307239999999, name: 'McDonalds-74' },
-  { lat: 27.8287509, lng: 41.5634695, name: 'McDonalds-82' },
-  { lat: 28.317957, lng: 45.951274, name: 'McDonalds-56' },
-  { lat: 28.3580909999999, lng: 45.9620759999999, name: 'McDonalds-59' },
-  { lat: 28.3747629999999, lng: 45.9613979999999, name: 'McDonalds-55' },
-  { lat: 28.3771630999999, lng: 36.5839755, name: 'McDonalds-91' },
-  { lat: 28.3798267, lng: 36.5125046, name: 'McDonalds-96' },
-  { lat: 28.4049175999999, lng: 36.5457748, name: 'McDonalds-92' },
-  { lat: 28.408354, lng: 45.967493, name: 'McDonalds-57' },
-  { lat: 28.4162383999999, lng: 36.5657373999999, name: 'McDonalds-93' },
-  { lat: 28.4225624999999, lng: 48.4828124999999, name: 'McDonalds-52' },
-  { lat: 28.4284525, lng: 36.57407, name: 'McDonalds-94' },
-  { lat: 28.4295364999999, lng: 36.526281, name: 'McDonalds-95' },
-  { lat: 28.434262, lng: 48.494537, name: 'McDonalds-53' },
-  { lat: 28.446064, lng: 45.947303, name: 'McDonalds-58' },
-  { lat: 29.62397, lng: 43.512812, name: 'McDonalds-73' },
-  { lat: 29.927584, lng: 40.192921, name: 'McDonalds-88' },
-  { lat: 29.959342, lng: 40.204659, name: 'McDonalds-89' },
-  { lat: 29.9751718, lng: 40.2232644, name: 'McDonalds-223' },
-  { lat: 30.95448, lng: 41.014528, name: 'McDonalds-86' },
-  { lat: 30.982853, lng: 41.030713, name: 'McDonalds-84' },
-  { lat: 30.9924219999999, lng: 41.05126, name: 'McDonalds-85' },
-  { lat: 31.3144368, lng: 37.3592666, name: 'McDonalds-90' },
-  { lat: 31.6769839999999, lng: 38.6634419999999, name: 'McDonalds-87' },
+  { lat: 26.3485719999999, lng: 50.1431539999999, name: 'McDonalds-334' },
+  { lat: 26.2157387, lng: 50.1793025, name: 'McDonalds-335' },
+  { lat: 26.4041805, lng: 50.0575097, name: 'McDonalds-336' },
+  { lat: 25.461242, lng: 49.5599822999999, name: 'McDonalds-337' },
+  { lat: 25.3690239, lng: 49.7236601, name: 'McDonalds-338' },
+  { lat: 24.8693703999999, lng: 46.6696637999999, name: 'McDonalds-339' },
+  { lat: 24.8859879, lng: 46.8571758999999, name: 'McDonalds-340' },
+  { lat: 24.832986, lng: 46.7884329, name: 'McDonalds-341' },
+  { lat: 24.753712, lng: 46.6094389999999, name: 'McDonalds-342' },
+  { lat: 24.75735, lng: 46.629622, name: 'McDonalds-343' },
+  { lat: 24.7536129999999, lng: 46.584149, name: 'McDonalds-344' },
+  { lat: 24.7549894, lng: 46.610031, name: 'McDonalds-345' },
+  { lat: 24.743942, lng: 46.657913, name: 'McDonalds-346' },
+  { lat: 24.713587, lng: 46.633252, name: 'McDonalds-347' },
+  { lat: 24.693768, lng: 46.606435, name: 'McDonalds-348' },
+  { lat: 24.6831173, lng: 46.5673923999999, name: 'McDonalds-349' },
+  { lat: 24.6402769999999, lng: 46.540506, name: 'McDonalds-350' },
+  { lat: 24.631477, lng: 46.5646599999999, name: 'McDonalds-351' },
+  { lat: 24.5638173, lng: 46.5753713, name: 'McDonalds-352' },
+  { lat: 24.5550289999999, lng: 46.492571, name: 'McDonalds-353' },
+  { lat: 24.555365, lng: 46.514708, name: 'McDonalds-354' },
+  { lat: 24.590339, lng: 46.594573, name: 'McDonalds-355' },
+  { lat: 24.685878, lng: 46.7748179999999, name: 'McDonalds-356' },
+  { lat: 24.689688, lng: 46.851168, name: 'McDonalds-357' },
+  { lat: 24.728913, lng: 46.837199, name: 'McDonalds-358' },
+  { lat: 24.704414, lng: 46.83339, name: 'McDonalds-359' },
+  { lat: 24.7500809999999, lng: 46.822255, name: 'McDonalds-360' },
+  { lat: 24.7537792, lng: 46.8240592999999, name: 'McDonalds-361' },
+  { lat: 24.6561004999999, lng: 46.7529714, name: 'McDonalds-362' },
+  { lat: 24.712228, lng: 46.675379, name: 'McDonalds-363' },
+  { lat: 24.449081, lng: 46.994597, name: 'McDonalds-364' },
+  { lat: 24.8934289, lng: 46.437202, name: 'McDonalds-365' },
+  { lat: 24.6920039999999, lng: 46.670226, name: 'McDonalds-366' },
+  { lat: 24.6823621, lng: 46.6959054, name: 'McDonalds-367' },
+  { lat: 24.739872, lng: 46.682434, name: 'McDonalds-368' },
+  { lat: 24.792862, lng: 46.7684937, name: 'McDonalds-369' },
+  { lat: 21.4917926, lng: 39.2204585, name: 'McDonalds-370' },
+  { lat: 21.6971065999999, lng: 39.1174677, name: 'McDonalds-371' },
+  { lat: 21.5102598, lng: 39.2464499999999, name: 'McDonalds-372' },
+  { lat: 21.7600518, lng: 39.184422, name: 'McDonalds-373' },
+  { lat: 21.7980978, lng: 39.0851796, name: 'McDonalds-374' },
+  { lat: 21.4403699, lng: 39.2824086, name: 'McDonalds-375' },
+  { lat: 21.465887, lng: 39.9775129999999, name: 'McDonalds-376' },
+  { lat: 24.4248522999999, lng: 39.5954826, name: 'McDonalds-377' },
+  { lat: 21.7900498, lng: 39.1301847, name: 'McDonalds-378' },
+  { lat: 21.7665389999999, lng: 39.1294873, name: 'McDonalds-379' },
+  { lat: 21.7473761999999, lng: 39.1479597, name: 'McDonalds-380' },
+  { lat: 21.7649203999999, lng: 39.142824, name: 'McDonalds-381' },
+  { lat: 21.7745103, lng: 39.1714447999999, name: 'McDonalds-382' },
+  { lat: 21.8437301, lng: 39.2018961, name: 'McDonalds-383' },
+  { lat: 21.7554458, lng: 39.2074038, name: 'McDonalds-384' },
+  { lat: 21.6545129, lng: 39.1117093, name: 'McDonalds-385' },
+  { lat: 21.6368884999999, lng: 39.1311937, name: 'McDonalds-386' },
+  { lat: 21.6167914999999, lng: 39.1722185, name: 'McDonalds-387' },
+  { lat: 21.6134845, lng: 39.1071114999999, name: 'McDonalds-388' },
+  { lat: 21.6148426, lng: 39.1881784, name: 'McDonalds-389' },
+  { lat: 21.6122221, lng: 39.1412246999999, name: 'McDonalds-390' },
+  { lat: 21.6280289999999, lng: 39.1113523, name: 'McDonalds-391' },
+  { lat: 21.6328709999999, lng: 39.1560769999999, name: 'McDonalds-392' },
+  { lat: 21.5595707, lng: 39.1332522, name: 'McDonalds-393' },
+  { lat: 21.5591157, lng: 39.1143752, name: 'McDonalds-394' },
+  { lat: 21.5684425999999, lng: 39.1815657, name: 'McDonalds-395' },
+  { lat: 21.5729094, lng: 39.1576532, name: 'McDonalds-396' },
+  { lat: 21.5629842, lng: 39.2023727, name: 'McDonalds-397' },
+  { lat: 21.5980113, lng: 39.2039484999999, name: 'McDonalds-398' },
+  { lat: 21.5763121, lng: 39.1961417, name: 'McDonalds-399' },
+  { lat: 21.6010946999999, lng: 39.1708742, name: 'McDonalds-400' },
+  { lat: 21.5808125, lng: 39.1636875, name: 'McDonalds-401' },
+  { lat: 21.5605944, lng: 39.1857155, name: 'McDonalds-402' },
+  { lat: 21.551582, lng: 39.2031179999999, name: 'McDonalds-403' },
+  { lat: 21.5620185, lng: 39.1642524999999, name: 'McDonalds-404' },
+  { lat: 21.5556231, lng: 39.1856766, name: 'McDonalds-405' },
+  { lat: 21.5046608, lng: 39.1831415, name: 'McDonalds-406' },
+  { lat: 21.5472973999999, lng: 39.1894865, name: 'McDonalds-407' },
+  { lat: 21.5272714, lng: 39.2154354, name: 'McDonalds-408' },
+  { lat: 21.5061216999999, lng: 39.2183227999999, name: 'McDonalds-409' },
+  { lat: 21.52204, lng: 39.2395304, name: 'McDonalds-410' },
+  { lat: 21.5650053, lng: 39.2434164999999, name: 'McDonalds-411' },
+  { lat: 21.5562938, lng: 39.2891901, name: 'McDonalds-412' },
+  { lat: 21.6116445999999, lng: 39.1984193, name: 'McDonalds-413' },
+  { lat: 21.595133, lng: 39.246262, name: 'McDonalds-414' },
+  { lat: 21.6245317, lng: 39.2108523, name: 'McDonalds-415' },
+  { lat: 21.5941112, lng: 39.2161843999999, name: 'McDonalds-416' },
+  { lat: 21.6132186, lng: 39.2086454999999, name: 'McDonalds-417' },
+  { lat: 21.581075, lng: 39.2296428, name: 'McDonalds-418' },
+  { lat: 21.5925458999999, lng: 39.2293725, name: 'McDonalds-419' },
+  { lat: 21.4234139999999, lng: 39.3128899999999, name: 'McDonalds-420' },
+  { lat: 21.4004510999999, lng: 39.2802486, name: 'McDonalds-421' },
+  { lat: 21.4825828, lng: 39.2387504999999, name: 'McDonalds-422' },
+  { lat: 21.4779754, lng: 39.2706522999999, name: 'McDonalds-423' },
+  { lat: 21.5072613, lng: 39.2236273, name: 'McDonalds-424' },
+  { lat: 21.6707111, lng: 39.2046494, name: 'McDonalds-425' },
+  { lat: 20.0724184, lng: 41.528148, name: 'McDonalds-426' },
+  { lat: 16.8818683, lng: 42.579068, name: 'McDonalds-427' },
+  { lat: 18.3298781, lng: 42.7607159999999, name: 'McDonalds-428' },
+  { lat: 21.3102205, lng: 39.2605827, name: 'McDonalds-429' },
+  { lat: 18.3277879, lng: 42.6922552, name: 'McDonalds-430' },
+
 
 ];
 
 
 const KFC = [
-  { lat: 16.9068649, lng: 42.5440615, name: 'KFC-260' },
-  { lat: 16.9068675, lng: 42.5440628, name: 'KFC-258' },
-  { lat: 17.1623302, lng: 42.6494314, name: 'KFC-261' },
-  { lat: 17.5635971, lng: 44.2299351, name: 'KFC-245' },
-  { lat: 18.1875093, lng: 42.8250421, name: 'KFC-250' },
-  { lat: 18.2200764999999, lng: 42.5176187, name: 'KFC-259' },
-  { lat: 18.2380624999999, lng: 42.5803125, name: 'KFC-249' },
-  { lat: 18.2510625, lng: 42.5985625, name: 'KFC-248' },
-  { lat: 18.2765199, lng: 42.7202452, name: 'KFC-247' },
-  { lat: 18.3053569, lng: 42.7317351999999, name: 'KFC-243' },
-  { lat: 18.3281875, lng: 42.7590625, name: 'KFC-246' },
-  { lat: 20.0143125, lng: 42.6220625, name: 'KFC-244' },
-  { lat: 20.0228183, lng: 41.4761164999999, name: 'KFC-262' },
-  { lat: 20.4603125, lng: 44.8060624999999, name: 'KFC-242' },
-  { lat: 21.2369085, lng: 40.4112551, name: 'KFC-215' },
-  { lat: 21.2634045, lng: 40.4064788999999, name: 'KFC-211' },
-  { lat: 21.2770625, lng: 40.4446875, name: 'KFC-208' },
-  { lat: 21.285923, lng: 40.4438191, name: 'KFC-216' },
-  { lat: 21.2880693, lng: 40.4177564999999, name: 'KFC-210' },
-  { lat: 21.3109081, lng: 39.2606276, name: 'KFC-187' },
-  { lat: 21.3453049, lng: 39.7538473, name: 'KFC-191' },
-  { lat: 21.3553219999999, lng: 40.4268895999999, name: 'KFC-212' },
-  { lat: 21.3553481999999, lng: 39.8809831, name: 'KFC-201' },
-  { lat: 21.3699787, lng: 39.8740205, name: 'KFC-198' },
-  { lat: 21.3766201999999, lng: 39.7957144999999, name: 'KFC-195' },
-  { lat: 21.3900625, lng: 39.7053125, name: 'KFC-188' },
-  { lat: 21.3984785, lng: 39.7887447999999, name: 'KFC-199' },
-  { lat: 21.4101389, lng: 39.8677062, name: 'KFC-197' },
-  { lat: 21.4115625, lng: 39.2989375, name: 'KFC-185' },
-  { lat: 21.4196875, lng: 39.8244374999999, name: 'KFC-192' },
-  { lat: 21.4201049, lng: 39.8237648, name: 'KFC-205' },
-  { lat: 21.4205625, lng: 39.8218125, name: 'KFC-207' },
-  { lat: 21.4248428, lng: 39.7947807, name: 'KFC-196' },
-  { lat: 21.4326837, lng: 39.829153, name: 'KFC-193' },
-  { lat: 21.43468, lng: 40.4992922, name: 'KFC-213' },
-  { lat: 21.4398135, lng: 39.7953358, name: 'KFC-200' },
-  { lat: 21.4410849, lng: 39.2805731, name: 'KFC-176' },
-  { lat: 21.4586465, lng: 39.2464352, name: 'KFC-175' },
-  { lat: 21.4598968, lng: 39.949466, name: 'KFC-202' },
-  { lat: 21.4710625, lng: 39.7968125, name: 'KFC-204' },
-  { lat: 21.4774375, lng: 39.9156875, name: 'KFC-206' },
-  { lat: 21.482841, lng: 39.2424993, name: 'KFC-186' },
-  { lat: 21.4837968999999, lng: 39.2316329, name: 'KFC-184' },
-  { lat: 21.5013212, lng: 40.4908512, name: 'KFC-209' },
-  { lat: 21.5044182, lng: 39.7916349, name: 'KFC-194' },
-  { lat: 21.506705, lng: 39.2168438, name: 'KFC-182' },
-  { lat: 21.5075535, lng: 39.2236171, name: 'KFC-179' },
-  { lat: 21.5091657999999, lng: 39.2454768, name: 'KFC-183' },
-  { lat: 21.5110423, lng: 39.1823374, name: 'KFC-168' },
-  { lat: 21.5113301, lng: 39.2263711999999, name: 'KFC-189' },
-  { lat: 21.5144634999999, lng: 39.2394615, name: 'KFC-160' },
-  { lat: 21.5200844, lng: 39.1569327, name: 'KFC-170' },
-  { lat: 21.5221874999999, lng: 39.1930624999999, name: 'KFC-165' },
-  { lat: 21.5415045, lng: 39.206834, name: 'KFC-177' },
-  { lat: 21.5536143, lng: 39.2146542, name: 'KFC-190' },
-  { lat: 21.5565625, lng: 39.1845625, name: 'KFC-161' },
-  { lat: 21.5566180999999, lng: 39.1702347999999, name: 'KFC-164' },
-  { lat: 21.5618034, lng: 39.1431562, name: 'KFC-169' },
-  { lat: 21.5654252999999, lng: 39.1850293, name: 'KFC-162' },
-  { lat: 21.5654658, lng: 39.2432236, name: 'KFC-178' },
-  { lat: 21.5781875, lng: 39.2303125, name: 'KFC-174' },
-  { lat: 21.5785846, lng: 39.2192192, name: 'KFC-181' },
-  { lat: 21.5809863, lng: 39.1642613, name: 'KFC-159' },
-  { lat: 21.5820625, lng: 39.7615625, name: 'KFC-214' },
-  { lat: 21.5868033999999, lng: 39.1314651, name: 'KFC-166' },
-  { lat: 21.5914821999999, lng: 39.2045737, name: 'KFC-180' },
-  { lat: 21.5929374999999, lng: 39.2300624999999, name: 'KFC-163' },
-  { lat: 21.5933603, lng: 39.2376444999999, name: 'KFC-203' },
-  { lat: 21.5939086, lng: 39.1868890999999, name: 'KFC-167' },
-  { lat: 21.5980453, lng: 39.1356739, name: 'KFC-172' },
-  { lat: 21.5996874999999, lng: 39.1659375, name: 'KFC-173' },
-  { lat: 21.6326121, lng: 39.1565904, name: 'KFC-171' },
-  { lat: 21.6402696999999, lng: 39.1306936, name: 'KFC-152' },
-  { lat: 21.6921906999999, lng: 39.1101228, name: 'KFC-151' },
-  { lat: 21.7433327, lng: 39.1910519, name: 'KFC-155' },
-  { lat: 21.7459891, lng: 39.1481662, name: 'KFC-154' },
-  { lat: 21.7481696, lng: 39.1130433999999, name: 'KFC-157' },
-  { lat: 21.7581365, lng: 39.2055612, name: 'KFC-158' },
-  { lat: 21.7734737999999, lng: 39.1688913, name: 'KFC-153' },
-  { lat: 21.7983266, lng: 39.0848131, name: 'KFC-156' },
-  { lat: 21.8016865, lng: 39.1451092, name: 'KFC-149' },
-  { lat: 21.8387405, lng: 39.1978234, name: 'KFC-150' },
-  { lat: 22.3028124999999, lng: 46.7313125, name: 'KFC-69' },
-  { lat: 22.3110426999999, lng: 39.1014523, name: 'KFC-147' },
-  { lat: 22.8009703, lng: 39.0468484999999, name: 'KFC-148' },
-  { lat: 24.0122240999999, lng: 38.2072219, name: 'KFC-144' },
-  { lat: 24.032821, lng: 38.1930774, name: 'KFC-146' },
-  { lat: 24.0824963, lng: 38.0528003, name: 'KFC-145' },
-  { lat: 24.1235951, lng: 47.2672698999999, name: 'KFC-66' },
-  { lat: 24.1546737999999, lng: 47.3526433, name: 'KFC-68' },
-  { lat: 24.1679274, lng: 47.3500601, name: 'KFC-67' },
-  { lat: 24.4136392, lng: 39.6190603, name: 'KFC-142' },
-  { lat: 24.4248077, lng: 39.59404, name: 'KFC-139' },
-  { lat: 24.4316888, lng: 39.6532452999999, name: 'KFC-143' },
-  { lat: 24.4473819999999, lng: 39.644872, name: 'KFC-133' },
-  { lat: 24.4494966999999, lng: 39.5231068999999, name: 'KFC-141' },
-  { lat: 24.4511313999999, lng: 39.6664111, name: 'KFC-140' },
-  { lat: 24.4618125, lng: 46.2991874999999, name: 'KFC-74' },
-  { lat: 24.4658125, lng: 39.6063125, name: 'KFC-138' },
-  { lat: 24.4684058, lng: 39.5476336, name: 'KFC-131' },
-  { lat: 24.4714593, lng: 39.610624, name: 'KFC-137' },
-  { lat: 24.4826294999999, lng: 39.7084575, name: 'KFC-130' },
-  { lat: 24.4854384, lng: 39.6402836, name: 'KFC-132' },
-  { lat: 24.4869295, lng: 39.6493183, name: 'KFC-134' },
-  { lat: 24.4886241, lng: 39.5804961, name: 'KFC-135' },
-  { lat: 24.4956517, lng: 39.5960561, name: 'KFC-136' },
-  { lat: 24.5335248, lng: 44.4307492, name: 'KFC-126' },
-  { lat: 24.5358163999999, lng: 46.6566776999999, name: 'KFC-75' },
-  { lat: 24.5456045, lng: 46.6945167999999, name: 'KFC-73' },
-  { lat: 24.5496791, lng: 46.7211729, name: 'KFC-76' },
-  { lat: 24.5527572, lng: 46.5713943999999, name: 'KFC-70' },
-  { lat: 24.5533967999999, lng: 46.8895142999999, name: 'KFC-71' },
-  { lat: 24.5564374999999, lng: 46.4999374999999, name: 'KFC-72' },
-  { lat: 24.5690916, lng: 46.6607159, name: 'KFC-265' },
-  { lat: 24.5702031999999, lng: 46.7881703, name: 'KFC-104' },
-  { lat: 24.5724178999999, lng: 46.6122528, name: 'KFC-264' },
-  { lat: 24.5738277, lng: 46.6952541, name: 'KFC-267' },
-  { lat: 24.5777936999999, lng: 46.5821233, name: 'KFC-266' },
-  { lat: 24.5778125, lng: 46.6990625, name: 'KFC-263' },
-  { lat: 24.5826164, lng: 46.6283422, name: 'KFC-107' },
-  { lat: 24.5874804999999, lng: 46.7628517, name: 'KFC-86' },
-  { lat: 24.5950641, lng: 46.737091, name: 'KFC-269' },
-  { lat: 24.5962469, lng: 46.6817783, name: 'KFC-270' },
-  { lat: 24.6004069, lng: 46.6441675999999, name: 'KFC-271' },
-  { lat: 24.6009375, lng: 46.6984375, name: 'KFC-268' },
-  { lat: 24.6096844, lng: 46.7107083999999, name: 'KFC-78' },
-  { lat: 24.6178517, lng: 46.7531763, name: 'KFC-99' },
-  { lat: 24.6254068999999, lng: 46.6889225, name: 'KFC-90' },
-  { lat: 24.6359595, lng: 46.5339216, name: 'KFC-251' },
-  { lat: 24.6382089, lng: 46.713719, name: 'KFC-92' },
-  { lat: 24.6460319999999, lng: 46.4966189999999, name: 'KFC-129' },
-  { lat: 24.6518212999999, lng: 46.7078896999999, name: 'KFC-80' },
-  { lat: 24.6638132, lng: 46.706475, name: 'KFC-98' },
-  { lat: 24.669468, lng: 46.7514368999999, name: 'KFC-101' },
-  { lat: 24.6782830999999, lng: 46.6557108999999, name: 'KFC-83' },
-  { lat: 24.6840264, lng: 46.7923858, name: 'KFC-100' },
-  { lat: 24.6866499, lng: 46.7240192999999, name: 'KFC-84' },
-  { lat: 24.6902866, lng: 46.7638490999999, name: 'KFC-97' },
-  { lat: 24.6920128, lng: 46.7010816999999, name: 'KFC-77' },
-  { lat: 24.7045778, lng: 46.6647609, name: 'KFC-79' },
-  { lat: 24.7094289, lng: 46.8146829999999, name: 'KFC-103' },
-  { lat: 24.7107523, lng: 46.6302279, name: 'KFC-105' },
-  { lat: 24.7123165, lng: 46.6753195999999, name: 'KFC-106' },
-  { lat: 24.7277178, lng: 46.6523507, name: 'KFC-272' },
-  { lat: 24.7325625, lng: 46.6739375, name: 'KFC-88' },
-  { lat: 24.7332176, lng: 46.7644369, name: 'KFC-95' },
-  { lat: 24.7530371, lng: 46.5778094, name: 'KFC-96' },
-  { lat: 24.7611389, lng: 46.6741323, name: 'KFC-108' },
-  { lat: 24.7670992, lng: 46.7591259, name: 'KFC-102' },
-  { lat: 24.7677244, lng: 46.7600573, name: 'KFC-89' },
-  { lat: 24.7703411999999, lng: 46.7123451, name: 'KFC-82' },
-  { lat: 24.7788312, lng: 46.7831523, name: 'KFC-93' },
-  { lat: 24.7826679, lng: 46.6615937, name: 'KFC-91' },
-  { lat: 24.7860625, lng: 46.8014375, name: 'KFC-122' },
-  { lat: 24.7930657999999, lng: 46.8630347, name: 'KFC-115' },
-  { lat: 24.7931875, lng: 46.7676875, name: 'KFC-113' },
-  { lat: 24.7958233, lng: 46.6290374, name: 'KFC-81' },
-  { lat: 24.8009006, lng: 46.7436626, name: 'KFC-117' },
-  { lat: 24.8010193, lng: 46.740626, name: 'KFC-114' },
-  { lat: 24.8062418, lng: 46.8028031, name: 'KFC-94' },
-  { lat: 24.8074375, lng: 46.8523125, name: 'KFC-110' },
-  { lat: 24.8083743999999, lng: 46.6662244, name: 'KFC-85' },
-  { lat: 24.813771, lng: 46.7700842, name: 'KFC-121' },
-  { lat: 24.8157692, lng: 46.6883304, name: 'KFC-118' },
-  { lat: 24.8195625, lng: 46.7878125, name: 'KFC-120' },
-  { lat: 24.8213124999999, lng: 46.6504374999999, name: 'KFC-87' },
-  { lat: 24.8276248, lng: 46.778889, name: 'KFC-116' },
-  { lat: 24.8300374, lng: 46.7461973, name: 'KFC-112' },
-  { lat: 24.8356612, lng: 46.6798165, name: 'KFC-111' },
-  { lat: 24.8473953, lng: 46.8246175999999, name: 'KFC-119' },
-  { lat: 24.8523125, lng: 46.8634374999999, name: 'KFC-109' },
-  { lat: 24.8563123, lng: 46.6471656999999, name: 'KFC-124' },
-  { lat: 24.8819528, lng: 46.6123622, name: 'KFC-123' },
-  { lat: 25.244512, lng: 45.2588268, name: 'KFC-127' },
-  { lat: 25.3272066999999, lng: 49.5527680999999, name: 'KFC-59' },
-  { lat: 25.3477140999999, lng: 49.5903923, name: 'KFC-64' },
-  { lat: 25.3634767999999, lng: 49.6050934, name: 'KFC-63' },
-  { lat: 25.373379, lng: 49.5902272, name: 'KFC-60' },
-  { lat: 25.3739463, lng: 49.7209731999999, name: 'KFC-65' },
-  { lat: 25.3753034999999, lng: 49.5644628999999, name: 'KFC-62' },
-  { lat: 25.4000378999999, lng: 49.577303, name: 'KFC-61' },
-  { lat: 25.4219951999999, lng: 49.5736384, name: 'KFC-57' },
-  { lat: 25.4312234, lng: 49.5729314999999, name: 'KFC-56' },
-  { lat: 25.4447434999999, lng: 49.593818, name: 'KFC-58' },
-  { lat: 25.8667104, lng: 43.4895334, name: 'KFC-125' },
-  { lat: 25.905192, lng: 45.3504262999999, name: 'KFC-240' },
-  { lat: 25.9266795, lng: 49.6579741, name: 'KFC-45' },
-  { lat: 26.0729375, lng: 44.0188935, name: 'KFC-234' },
-  { lat: 26.0745233, lng: 43.9816001999999, name: 'KFC-237' },
-  { lat: 26.098027, lng: 43.9845446, name: 'KFC-128' },
-  { lat: 26.1489461, lng: 43.6532779, name: 'KFC-239' },
-  { lat: 26.157217, lng: 50.1614760999999, name: 'KFC-42' },
-  { lat: 26.1684375, lng: 49.9243125, name: 'KFC-43' },
-  { lat: 26.1849663, lng: 50.1857974, name: 'KFC-44' },
-  { lat: 26.2540844999999, lng: 49.9910499999999, name: 'KFC-27' },
-  { lat: 26.2683203, lng: 50.1875722, name: 'KFC-22' },
-  { lat: 26.2835882, lng: 50.1970971, name: 'KFC-30' },
-  { lat: 26.2857254999999, lng: 50.2190000999999, name: 'KFC-24' },
-  { lat: 26.2898125, lng: 50.1809375, name: 'KFC-33' },
-  { lat: 26.3006156999999, lng: 50.1736218, name: 'KFC-10' },
-  { lat: 26.3045662999999, lng: 50.1699887, name: 'KFC-26' },
-  { lat: 26.3051757999999, lng: 50.1964154, name: 'KFC-23' },
-  { lat: 26.3095514, lng: 44.8280574, name: 'KFC-241' },
-  { lat: 26.3128277, lng: 50.2228795, name: 'KFC-29' },
-  { lat: 26.3304467999999, lng: 50.1627988, name: 'KFC-34' },
-  { lat: 26.3425184, lng: 49.9712521, name: 'KFC-20' },
-  { lat: 26.3467482999999, lng: 43.977108, name: 'KFC-233' },
-  { lat: 26.3471749, lng: 50.1442669, name: 'KFC-31' },
-  { lat: 26.3628692, lng: 50.2060126999999, name: 'KFC-14' },
-  { lat: 26.3678247, lng: 43.9618141, name: 'KFC-238' },
-  { lat: 26.3747677999999, lng: 43.9356450999999, name: 'KFC-235' },
-  { lat: 26.3783125, lng: 50.0683125, name: 'KFC-17' },
-  { lat: 26.3789619, lng: 43.9528967, name: 'KFC-232' },
-  { lat: 26.3801624999999, lng: 50.0112132, name: 'KFC-16' },
-  { lat: 26.3810972, lng: 50.1481397999999, name: 'KFC-28' },
-  { lat: 26.3819336, lng: 50.0557308, name: 'KFC-19' },
-  { lat: 26.3821826999999, lng: 50.1783078, name: 'KFC-12' },
-  { lat: 26.3950165, lng: 50.0782309999999, name: 'KFC-8' },
-  { lat: 26.3998258, lng: 50.0414156999999, name: 'KFC-6' },
-  { lat: 26.4000979, lng: 50.1170614, name: 'KFC-5' },
-  { lat: 26.402845, lng: 50.062965, name: 'KFC-11' },
-  { lat: 26.4097555, lng: 50.1088083, name: 'KFC-15' },
-  { lat: 26.4185184, lng: 43.9128411999999, name: 'KFC-236' },
-  { lat: 26.4207455, lng: 50.0231237, name: 'KFC-13' },
-  { lat: 26.4226422, lng: 50.0919921, name: 'KFC-4' },
-  { lat: 26.4274375, lng: 50.0429375, name: 'KFC-7' },
-  { lat: 26.4307801999999, lng: 50.0673023999999, name: 'KFC-18' },
   { lat: 26.4541872999999, lng: 50.1193895, name: 'KFC-1' },
-  { lat: 26.4549558, lng: 50.1057135999999, name: 'KFC-21' },
-  { lat: 26.4591541, lng: 50.0901221999999, name: 'KFC-3' },
-  { lat: 26.4623359, lng: 50.0643605, name: 'KFC-32' },
   { lat: 26.4671874999999, lng: 50.1231875, name: 'KFC-2' },
-  { lat: 26.4803560999999, lng: 50.0543361, name: 'KFC-9' },
-  { lat: 26.5711874999999, lng: 50.0251875, name: 'KFC-25' },
-  { lat: 26.6453579999999, lng: 49.9603374, name: 'KFC-37' },
-  { lat: 26.7074219999999, lng: 50.0559991999999, name: 'KFC-35' },
-  { lat: 26.8768483, lng: 49.749067, name: 'KFC-36' },
-  { lat: 26.9224374999999, lng: 49.4300625, name: 'KFC-38' },
-  { lat: 26.9848280999999, lng: 49.6481408, name: 'KFC-39' },
-  { lat: 27.0026875, lng: 49.6614375, name: 'KFC-41' },
-  { lat: 27.0128776, lng: 49.6516115999999, name: 'KFC-40' },
-  { lat: 27.0645413, lng: 49.2613589, name: 'KFC-46' },
-  { lat: 27.1202528, lng: 49.5484495, name: 'KFC-47' },
-  { lat: 27.1364448999999, lng: 49.5653751, name: 'KFC-48' },
-  { lat: 27.4281875, lng: 41.5961875, name: 'KFC-225' },
-  { lat: 27.4282024, lng: 41.5962083999999, name: 'KFC-231' },
-  { lat: 27.4723047, lng: 48.5013605, name: 'KFC-50' },
-  { lat: 27.4740625, lng: 41.6763125, name: 'KFC-230' },
-  { lat: 27.4886874999999, lng: 41.6779375, name: 'KFC-227' },
-  { lat: 27.5001897999999, lng: 41.6996436999999, name: 'KFC-228' },
-  { lat: 27.5537265999999, lng: 41.7036151, name: 'KFC-226' },
-  { lat: 27.5660512, lng: 41.7303406, name: 'KFC-229' },
-  { lat: 28.0215624999999, lng: 35.2321874999999, name: 'KFC-217' },
-  { lat: 28.0215624999999, lng: 35.2321874999999, name: 'KFC-221' },
-  { lat: 28.3571784, lng: 45.9613466, name: 'KFC-55' },
-  { lat: 28.3776875, lng: 36.5155625, name: 'KFC-219' },
-  { lat: 28.3830203, lng: 36.4848826, name: 'KFC-224' },
-  { lat: 28.3831058, lng: 36.5895663, name: 'KFC-220' },
-  { lat: 28.3978242, lng: 45.9651646999999, name: 'KFC-51' },
-  { lat: 28.4074702, lng: 36.5411645, name: 'KFC-218' },
-  { lat: 28.4270484999999, lng: 45.9740034999999, name: 'KFC-54' },
-  { lat: 28.4287285, lng: 36.5740925, name: 'KFC-222' },
-  { lat: 28.4328124999999, lng: 36.5259375, name: 'KFC-223' },
-  { lat: 28.4374374999999, lng: 45.9485625, name: 'KFC-52' },
-  { lat: 28.4414342, lng: 48.4939362999999, name: 'KFC-53' },
-  { lat: 29.7988115999999, lng: 39.8667626, name: 'KFC-255' },
-  { lat: 29.9281875, lng: 40.1915624999999, name: 'KFC-254' },
-  { lat: 29.9626463999999, lng: 40.2220839999999, name: 'KFC-253' },
-  { lat: 30.9722992, lng: 41.0156950999999, name: 'KFC-252' },
-  { lat: 30.9920063, lng: 41.049336, name: 'KFC-256' },
+  { lat: 26.4549558, lng: 50.1057135999999, name: 'KFC-3' },
+  { lat: 26.4591541, lng: 50.0901221999999, name: 'KFC-4' },
+  { lat: 26.4226422, lng: 50.0919921, name: 'KFC-5' },
+  { lat: 26.4097555, lng: 50.1088083, name: 'KFC-6' },
+  { lat: 26.4000979, lng: 50.1170614, name: 'KFC-7' },
+  { lat: 26.4307801999999, lng: 50.0673023999999, name: 'KFC-8' },
+  { lat: 26.3950165, lng: 50.0782309999999, name: 'KFC-9' },
+  { lat: 26.4623359, lng: 50.0643605, name: 'KFC-10' },
+  { lat: 26.3998258, lng: 50.0414156999999, name: 'KFC-11' },
+  { lat: 26.402845, lng: 50.062965, name: 'KFC-12' },
+  { lat: 26.3821826999999, lng: 50.1783078, name: 'KFC-13' },
+  { lat: 26.4803560999999, lng: 50.0543361, name: 'KFC-14' },
+  { lat: 26.4274375, lng: 50.0429375, name: 'KFC-15' },
+  { lat: 26.3810972, lng: 50.1481397999999, name: 'KFC-16' },
+  { lat: 26.3819336, lng: 50.0557308, name: 'KFC-17' },
+  { lat: 26.4207455, lng: 50.0231237, name: 'KFC-18' },
+  { lat: 26.3783125, lng: 50.0683125, name: 'KFC-19' },
+  { lat: 26.3801624999999, lng: 50.0112132, name: 'KFC-20' },
+  { lat: 26.3471749, lng: 50.1442669, name: 'KFC-21' },
+  { lat: 26.3628692, lng: 50.2060126999999, name: 'KFC-22' },
+  { lat: 26.5711874999999, lng: 50.0251875, name: 'KFC-23' },
+  { lat: 26.6453579999999, lng: 49.9603374, name: 'KFC-24' },
+  { lat: 26.7074219999999, lng: 50.0559991999999, name: 'KFC-25' },
+  { lat: 27.1202528, lng: 49.5484495, name: 'KFC-26' },
+  { lat: 27.0128776, lng: 49.6516115999999, name: 'KFC-27' },
+  { lat: 27.1364448999999, lng: 49.5653751, name: 'KFC-28' },
+  { lat: 27.0645413, lng: 49.2613589, name: 'KFC-29' },
+  { lat: 27.0026875, lng: 49.6614375, name: 'KFC-30' },
+  { lat: 26.9848280999999, lng: 49.6481408, name: 'KFC-31' },
+  { lat: 26.9224374999999, lng: 49.4300625, name: 'KFC-32' },
+  { lat: 26.8768483, lng: 49.749067, name: 'KFC-33' },
+  { lat: 26.3304467999999, lng: 50.1627988, name: 'KFC-34' },
+  { lat: 26.2540844999999, lng: 49.9910499999999, name: 'KFC-35' },
+  { lat: 26.1684375, lng: 49.9243125, name: 'KFC-36' },
+  { lat: 26.2835882, lng: 50.1970971, name: 'KFC-37' },
+  { lat: 26.3051757999999, lng: 50.1964154, name: 'KFC-38' },
+  { lat: 26.3006156999999, lng: 50.1736218, name: 'KFC-39' },
+  { lat: 26.3128277, lng: 50.2228795, name: 'KFC-40' },
+  { lat: 26.2857254999999, lng: 50.2190000999999, name: 'KFC-41' },
+  { lat: 26.2683203, lng: 50.1875722, name: 'KFC-42' },
+  { lat: 26.1849663, lng: 50.1857974, name: 'KFC-43' },
+  { lat: 26.157217, lng: 50.1614760999999, name: 'KFC-44' },
+  { lat: 26.3045662999999, lng: 50.1699887, name: 'KFC-45' },
+  { lat: 26.2898125, lng: 50.1809375, name: 'KFC-46' },
+  { lat: 26.3425184, lng: 49.9712521, name: 'KFC-47' },
+  { lat: 25.9266795, lng: 49.6579741, name: 'KFC-48' },
+  { lat: 27.4723047, lng: 48.5013605, name: 'KFC-49' },
+  { lat: 28.4414342, lng: 48.4939362999999, name: 'KFC-50' },
+  { lat: 28.4446054999999, lng: 48.4958709, name: 'KFC-51' },
+  { lat: 25.4219951999999, lng: 49.5736384, name: 'KFC-52' },
+  { lat: 25.3634767999999, lng: 49.6050934, name: 'KFC-53' },
+  { lat: 25.3272066999999, lng: 49.5527680999999, name: 'KFC-54' },
+  { lat: 25.4312234, lng: 49.5729314999999, name: 'KFC-55' },
+  { lat: 25.3753034999999, lng: 49.5644628999999, name: 'KFC-56' },
+  { lat: 25.4447434999999, lng: 49.593818, name: 'KFC-57' },
+  { lat: 25.3477140999999, lng: 49.5903923, name: 'KFC-58' },
+  { lat: 25.373379, lng: 49.5902272, name: 'KFC-59' },
+  { lat: 25.3739463, lng: 49.7209731999999, name: 'KFC-60' },
+  { lat: 25.4000378999999, lng: 49.577303, name: 'KFC-61' },
+  { lat: 24.8083743999999, lng: 46.6662244, name: 'KFC-62' },
+  { lat: 24.7703411999999, lng: 46.7123451, name: 'KFC-63' },
+  { lat: 24.7958233, lng: 46.6290374, name: 'KFC-64' },
+  { lat: 24.7045778, lng: 46.6647609, name: 'KFC-65' },
+  { lat: 24.8563123, lng: 46.6471656999999, name: 'KFC-66' },
+  { lat: 24.6840264, lng: 46.7923858, name: 'KFC-67' },
+  { lat: 24.7332176, lng: 46.7644369, name: 'KFC-68' },
+  { lat: 24.6902866, lng: 46.7638490999999, name: 'KFC-69' },
+  { lat: 24.7611389, lng: 46.6741323, name: 'KFC-70' },
+  { lat: 24.7107523, lng: 46.6302279, name: 'KFC-71' },
+  { lat: 24.8213124999999, lng: 46.6504374999999, name: 'KFC-72' },
+  { lat: 24.8300374, lng: 46.7461973, name: 'KFC-73' },
+  { lat: 24.7420704, lng: 46.8072166, name: 'KFC-74' },
+  { lat: 24.8010193, lng: 46.740626, name: 'KFC-75' },
+  { lat: 24.8356612, lng: 46.6798165, name: 'KFC-76' },
+  { lat: 24.8276248, lng: 46.778889, name: 'KFC-77' },
+  { lat: 24.78519, lng: 46.5673048999999, name: 'KFC-78' },
+  { lat: 24.7788312, lng: 46.7831523, name: 'KFC-79' },
+  { lat: 24.8062418, lng: 46.8028031, name: 'KFC-80' },
+  { lat: 24.6866499, lng: 46.7240192999999, name: 'KFC-81' },
+  { lat: 24.1235951, lng: 47.2672698999999, name: 'KFC-82' },
+  { lat: 24.1586911, lng: 47.3259131, name: 'KFC-83' },
+  { lat: 24.1546737999999, lng: 47.3526433, name: 'KFC-84' },
+  { lat: 24.1928828, lng: 47.2763731, name: 'KFC-85' },
+  { lat: 24.5724178999999, lng: 46.6122528, name: 'KFC-86' },
+  { lat: 24.5690916, lng: 46.6607159, name: 'KFC-87' },
+  { lat: 24.5702031999999, lng: 46.7881703, name: 'KFC-88' },
+  { lat: 24.5533967999999, lng: 46.8895142999999, name: 'KFC-89' },
+  { lat: 24.5826164, lng: 46.6283422, name: 'KFC-90' },
+  { lat: 24.5456045, lng: 46.6945167999999, name: 'KFC-91' },
+  { lat: 24.5777936999999, lng: 46.5821233, name: 'KFC-92' },
+  { lat: 24.5527572, lng: 46.5713943999999, name: 'KFC-93' },
+  { lat: 24.5358163999999, lng: 46.6566776999999, name: 'KFC-94' },
+  { lat: 24.5778125, lng: 46.6990625, name: 'KFC-95' },
+  { lat: 24.5496791, lng: 46.7211729, name: 'KFC-96' },
+  { lat: 24.5564374999999, lng: 46.4999374999999, name: 'KFC-97' },
+  { lat: 24.5738277, lng: 46.6952541, name: 'KFC-98' },
+  { lat: 24.5582222, lng: 46.6362540999999, name: 'KFC-99' },
+  { lat: 24.5778087, lng: 46.6990792, name: 'KFC-100' },
+  { lat: 24.6178517, lng: 46.7531763, name: 'KFC-101' },
+  { lat: 24.6801875, lng: 46.8334374999999, name: 'KFC-102' },
+  { lat: 24.6802884, lng: 46.8333556, name: 'KFC-103' },
+  { lat: 24.6855874, lng: 46.7757074999999, name: 'KFC-104' },
+  { lat: 24.7094289, lng: 46.8146829999999, name: 'KFC-105' },
+  { lat: 24.7295327999999, lng: 46.8364104, name: 'KFC-106' },
+  { lat: 24.7508205999999, lng: 46.8230012, name: 'KFC-107' },
+  { lat: 24.779562, lng: 46.8314519, name: 'KFC-108' },
+  { lat: 24.7930657999999, lng: 46.8630347, name: 'KFC-109' },
+  { lat: 24.7860625, lng: 46.8014375, name: 'KFC-110' },
+  { lat: 24.7670341, lng: 46.8061705, name: 'KFC-111' },
+  { lat: 24.8074375, lng: 46.8523125, name: 'KFC-112' },
+  { lat: 24.7931875, lng: 46.7676875, name: 'KFC-113' },
+  { lat: 24.813771, lng: 46.7700842, name: 'KFC-114' },
+  { lat: 24.7670992, lng: 46.7591259, name: 'KFC-115' },
+  { lat: 24.7677244, lng: 46.7600573, name: 'KFC-116' },
+  { lat: 24.7244562, lng: 46.7749601, name: 'KFC-117' },
+  { lat: 24.8195625, lng: 46.7878125, name: 'KFC-118' },
+  { lat: 24.8523125, lng: 46.8634374999999, name: 'KFC-119' },
+  { lat: 24.8473953, lng: 46.8246175999999, name: 'KFC-120' },
+  { lat: 24.8009006, lng: 46.7436626, name: 'KFC-121' },
+  { lat: 24.8157692, lng: 46.6883304, name: 'KFC-122' },
+  { lat: 24.8341875, lng: 46.6573124999999, name: 'KFC-123' },
+  { lat: 24.7826679, lng: 46.6615937, name: 'KFC-124' },
+  { lat: 24.7616138, lng: 46.6951045, name: 'KFC-125' },
+  { lat: 24.785489, lng: 46.6457769999999, name: 'KFC-126' },
+  { lat: 24.7852812999999, lng: 46.6136486, name: 'KFC-127' },
+  { lat: 24.7872149, lng: 46.7072025999999, name: 'KFC-128' },
+  { lat: 24.8819528, lng: 46.6123622, name: 'KFC-129' },
+  { lat: 24.6254068999999, lng: 46.6889225, name: 'KFC-130' },
+  { lat: 24.6782830999999, lng: 46.6557108999999, name: 'KFC-131' },
+  { lat: 24.9581892, lng: 46.7041537, name: 'KFC-132' },
+  { lat: 24.7530371, lng: 46.5778094, name: 'KFC-133' },
+  { lat: 24.7325625, lng: 46.6739375, name: 'KFC-134' },
+  { lat: 24.74411, lng: 46.657441, name: 'KFC-135' },
+  { lat: 24.6326131999999, lng: 46.5663483999999, name: 'KFC-136' },
+  { lat: 24.7457474, lng: 46.6197219999999, name: 'KFC-137' },
+  { lat: 24.7277178, lng: 46.6523507, name: 'KFC-138' },
+  { lat: 24.7574374999999, lng: 46.6295625, name: 'KFC-139' },
+  { lat: 24.7435890999999, lng: 46.6795496999999, name: 'KFC-140' },
+  { lat: 24.7280321, lng: 46.6523018, name: 'KFC-141' },
+  { lat: 24.6004069, lng: 46.6441675999999, name: 'KFC-142' },
+  { lat: 24.6382089, lng: 46.713719, name: 'KFC-143' },
+  { lat: 24.5962469, lng: 46.6817783, name: 'KFC-144' },
+  { lat: 24.6096844, lng: 46.7107083999999, name: 'KFC-145' },
+  { lat: 24.6009375, lng: 46.6984375, name: 'KFC-146' },
+  { lat: 24.6359595, lng: 46.5339216, name: 'KFC-147' },
+  { lat: 24.5874804999999, lng: 46.7628517, name: 'KFC-148' },
+  { lat: 24.6638125, lng: 46.7036875, name: 'KFC-149' },
+  { lat: 24.6638132, lng: 46.706475, name: 'KFC-150' },
+  { lat: 24.6518212999999, lng: 46.7078896999999, name: 'KFC-151' },
+  { lat: 24.7118309, lng: 46.6968177, name: 'KFC-152' },
+  { lat: 24.6820578, lng: 46.7184883, name: 'KFC-153' },
+  { lat: 24.6909375, lng: 46.7601875, name: 'KFC-154' },
+  { lat: 24.6764546, lng: 46.6761413, name: 'KFC-155' },
+  { lat: 24.6920128, lng: 46.7010816999999, name: 'KFC-156' },
+  { lat: 24.669468, lng: 46.7514368999999, name: 'KFC-157' },
+  { lat: 24.7690625, lng: 46.6049375, name: 'KFC-158' },
+  { lat: 24.5950641, lng: 46.737091, name: 'KFC-159' },
+  { lat: 24.7123165, lng: 46.6753195999999, name: 'KFC-160' },
+  { lat: 24.4618125, lng: 46.2991874999999, name: 'KFC-161' },
+  { lat: 24.4618125, lng: 46.2991874999999, name: 'KFC-162' },
+  { lat: 24.4714593, lng: 39.610624, name: 'KFC-163' },
+  { lat: 21.8016865, lng: 39.1451092, name: 'KFC-164' },
+  { lat: 21.3766201999999, lng: 39.7957144999999, name: 'KFC-165' },
+  { lat: 21.5415045, lng: 39.206834, name: 'KFC-166' },
+  { lat: 21.5618034, lng: 39.1431562, name: 'KFC-167' },
+  { lat: 24.4248077, lng: 39.59404, name: 'KFC-168' },
+  { lat: 24.4854384, lng: 39.6402836, name: 'KFC-169' },
+  { lat: 24.4658125, lng: 39.6063125, name: 'KFC-170' },
+  { lat: 24.4684058, lng: 39.5476336, name: 'KFC-171' },
+  { lat: 24.4473819999999, lng: 39.644872, name: 'KFC-172' },
+  { lat: 24.4886241, lng: 39.5804961, name: 'KFC-173' },
+  { lat: 24.4511313999999, lng: 39.6664111, name: 'KFC-174' },
+  { lat: 24.4956517, lng: 39.5960561, name: 'KFC-175' },
+  { lat: 24.4136392, lng: 39.6190603, name: 'KFC-176' },
+  { lat: 24.4530501, lng: 39.6889171, name: 'KFC-177' },
+  { lat: 24.4826294999999, lng: 39.7084575, name: 'KFC-178' },
+  { lat: 24.4494966999999, lng: 39.5231068999999, name: 'KFC-179' },
+  { lat: 24.4869295, lng: 39.6493183, name: 'KFC-180' },
+  { lat: 24.4316888, lng: 39.6532452999999, name: 'KFC-181' },
+  { lat: 22.8009703, lng: 39.0468484999999, name: 'KFC-182' },
+  { lat: 24.0122240999999, lng: 38.2072219, name: 'KFC-183' },
+  { lat: 24.0824963, lng: 38.0528003, name: 'KFC-184' },
+  { lat: 24.032821, lng: 38.1930774, name: 'KFC-185' },
+  { lat: 21.8387405, lng: 39.1978234, name: 'KFC-186' },
+  { lat: 22.3110426999999, lng: 39.1014523, name: 'KFC-187' },
+  { lat: 21.7581365, lng: 39.2055612, name: 'KFC-188' },
+  { lat: 21.7734737999999, lng: 39.1688913, name: 'KFC-189' },
+  { lat: 21.7433327, lng: 39.1910519, name: 'KFC-190' },
+  { lat: 21.6706354, lng: 39.2052943, name: 'KFC-191' },
+  { lat: 21.7459891, lng: 39.1481662, name: 'KFC-192' },
+  { lat: 21.7481696, lng: 39.1130433999999, name: 'KFC-193' },
+  { lat: 21.7983266, lng: 39.0848131, name: 'KFC-194' },
+  { lat: 21.6206435999999, lng: 39.1915167999999, name: 'KFC-195' },
+  { lat: 21.6219286999999, lng: 39.201786, name: 'KFC-196' },
+  { lat: 21.6008125, lng: 39.2249374999999, name: 'KFC-197' },
+  { lat: 21.5996874999999, lng: 39.1659375, name: 'KFC-198' },
+  { lat: 21.5933603, lng: 39.2376444999999, name: 'KFC-199' },
+  { lat: 21.5929374999999, lng: 39.2300624999999, name: 'KFC-200' },
+  { lat: 21.5781875, lng: 39.2303125, name: 'KFC-201' },
+  { lat: 21.5144634999999, lng: 39.2394615, name: 'KFC-202' },
+  { lat: 21.5091657999999, lng: 39.2454768, name: 'KFC-203' },
+  { lat: 21.4410849, lng: 39.2805731, name: 'KFC-204' },
+  { lat: 21.4115625, lng: 39.2989375, name: 'KFC-205' },
+  { lat: 21.3109081, lng: 39.2606276, name: 'KFC-206' },
+  { lat: 21.4837968999999, lng: 39.2316329, name: 'KFC-207' },
+  { lat: 21.4586465, lng: 39.2464352, name: 'KFC-208' },
+  { lat: 21.482841, lng: 39.2424993, name: 'KFC-209' },
+  { lat: 21.5110423, lng: 39.1823374, name: 'KFC-210' },
+  { lat: 21.506705, lng: 39.2168438, name: 'KFC-211' },
+  { lat: 21.5221874999999, lng: 39.1930624999999, name: 'KFC-212' },
+  { lat: 21.5200844, lng: 39.1569327, name: 'KFC-213' },
+  { lat: 21.5113301, lng: 39.2263711999999, name: 'KFC-214' },
+  { lat: 21.5075535, lng: 39.2236171, name: 'KFC-215' },
+  { lat: 21.527763, lng: 39.1855319999999, name: 'KFC-216' },
+  { lat: 21.5654252999999, lng: 39.1850293, name: 'KFC-217' },
+  { lat: 21.5566180999999, lng: 39.1702347999999, name: 'KFC-218' },
+  { lat: 21.5980453, lng: 39.1356739, name: 'KFC-219' },
+  { lat: 21.5809863, lng: 39.1642613, name: 'KFC-220' },
+  { lat: 21.5654658, lng: 39.2432236, name: 'KFC-221' },
+  { lat: 21.6131969, lng: 39.1530944, name: 'KFC-222' },
+  { lat: 21.6074199, lng: 39.1238838999999, name: 'KFC-223' },
+  { lat: 21.5536143, lng: 39.2146542, name: 'KFC-224' },
+  { lat: 21.6402696999999, lng: 39.1306936, name: 'KFC-225' },
+  { lat: 21.5868033999999, lng: 39.1314651, name: 'KFC-226' },
+  { lat: 21.5939086, lng: 39.1868890999999, name: 'KFC-227' },
+  { lat: 21.6921906999999, lng: 39.1101228, name: 'KFC-228' },
+  { lat: 21.5565625, lng: 39.1845625, name: 'KFC-229' },
+  { lat: 21.5785846, lng: 39.2192192, name: 'KFC-230' },
+  { lat: 21.4201049, lng: 39.8237648, name: 'KFC-231' },
+  { lat: 21.4398135, lng: 39.7953358, name: 'KFC-232' },
+  { lat: 21.4326837, lng: 39.829153, name: 'KFC-233' },
+  { lat: 21.4710625, lng: 39.7968125, name: 'KFC-234' },
+  { lat: 21.3984785, lng: 39.7887447999999, name: 'KFC-235' },
+  { lat: 21.3453049, lng: 39.7538473, name: 'KFC-236' },
+  { lat: 21.4248428, lng: 39.7947807, name: 'KFC-237' },
+  { lat: 21.4210675, lng: 39.8215657, name: 'KFC-238' },
+  { lat: 21.4205625, lng: 39.8218125, name: 'KFC-239' },
+  { lat: 21.3900625, lng: 39.7053125, name: 'KFC-240' },
+  { lat: 21.3668078999999, lng: 39.8341613, name: 'KFC-241' },
+  { lat: 21.4196875, lng: 39.8244374999999, name: 'KFC-242' },
+  { lat: 21.3699787, lng: 39.8740205, name: 'KFC-243' },
+  { lat: 21.4101389, lng: 39.8677062, name: 'KFC-244' },
+  { lat: 21.3553481999999, lng: 39.8809831, name: 'KFC-245' },
+  { lat: 21.4225484999999, lng: 39.8738224999999, name: 'KFC-246' },
+  { lat: 21.5044182, lng: 39.7916349, name: 'KFC-247' },
+  { lat: 21.5044182, lng: 39.7916349, name: 'KFC-248' },
+  { lat: 21.3553219999999, lng: 40.4268895999999, name: 'KFC-249' },
+  { lat: 21.43468, lng: 40.4992922, name: 'KFC-250' },
+  { lat: 21.2880693, lng: 40.4177564999999, name: 'KFC-251' },
+  { lat: 21.285923, lng: 40.4438191, name: 'KFC-252' },
+  { lat: 21.2634045, lng: 40.4064788999999, name: 'KFC-253' },
+  { lat: 21.2770625, lng: 40.4446875, name: 'KFC-254' },
+  { lat: 21.2369085, lng: 40.4112551, name: 'KFC-255' },
+  { lat: 21.5013212, lng: 40.4908512, name: 'KFC-256' },
+  { lat: 21.4598968, lng: 39.949466, name: 'KFC-257' },
+  { lat: 21.4774375, lng: 39.9156875, name: 'KFC-258' },
+  { lat: 21.6326121, lng: 39.1565904, name: 'KFC-259' },
+  { lat: 21.5914821999999, lng: 39.2045737, name: 'KFC-260' },
+  { lat: 21.5550836999999, lng: 39.2871889, name: 'KFC-261' },
+  { lat: 21.6276405, lng: 39.1116554, name: 'KFC-262' },
+  { lat: 21.5762458, lng: 39.1967719, name: 'KFC-263' },
+  { lat: 20.0228183, lng: 41.4761164999999, name: 'KFC-264' },
+  { lat: 18.5424917, lng: 42.0384814999999, name: 'KFC-265' },
+  { lat: 18.9770614999999, lng: 41.3009321, name: 'KFC-266' },
+  { lat: 18.2200764999999, lng: 42.5176187, name: 'KFC-267' },
+  { lat: 18.2200764999999, lng: 42.5176187, name: 'KFC-268' },
+  { lat: 18.3281875, lng: 42.7590625, name: 'KFC-269' },
+  { lat: 18.3053569, lng: 42.7317351999999, name: 'KFC-270' },
+  { lat: 18.2765199, lng: 42.7202452, name: 'KFC-271' },
+  { lat: 18.2510625, lng: 42.5985625, name: 'KFC-272' },
+  { lat: 18.2380624999999, lng: 42.5803125, name: 'KFC-273' },
+  { lat: 18.3280663, lng: 42.7590494999999, name: 'KFC-274' },
+  { lat: 18.2818836999999, lng: 42.5936333999999, name: 'KFC-275' },
+  { lat: 18.1875093, lng: 42.8250421, name: 'KFC-276' },
+  { lat: 17.5635971, lng: 44.2299351, name: 'KFC-277' },
+  { lat: 20.4603125, lng: 44.8060624999999, name: 'KFC-278' },
+  { lat: 17.1623302, lng: 42.6494314, name: 'KFC-279' },
+  { lat: 20.0143125, lng: 42.6220625, name: 'KFC-280' },
+  { lat: 22.3028124999999, lng: 46.7313125, name: 'KFC-281' },
+
 ];
 
 
 const KUDU = [
-  { lat: 26.4420175, lng: 50.1177564, name: 'Kudu-1' },
-  { lat: 26.4004504, lng: 50.1150443, name: 'Kudu-2' },
-  { lat: 26.4844941, lng: 50.0535079, name: 'Kudu-3' },
-  { lat: 26.4028472999999, lng: 50.1009764, name: 'Kudu-4' },
-  { lat: 26.430625, lng: 50.0670079999999, name: 'Kudu-5' },
-  { lat: 26.4151685999999, lng: 50.1175267, name: 'Kudu-6' },
-  { lat: 26.3050104, lng: 50.1967273, name: 'Kudu-7' },
-  { lat: 26.4622852, lng: 50.0642792999999, name: 'Kudu-8' },
-  { lat: 26.412163, lng: 50.046127, name: 'Kudu-9' },
-  { lat: 26.2792681, lng: 50.208064, name: 'Kudu-10' },
-  { lat: 26.3860893, lng: 50.1782225, name: 'Kudu-11' },
-  { lat: 26.3687859, lng: 50.0538953999999, name: 'Kudu-12' },
-  { lat: 26.706455, lng: 50.0522716, name: 'Kudu-13' },
-  { lat: 26.4102575999999, lng: 50.0335185, name: 'Kudu-14' },
-  { lat: 21.5834159, lng: 39.153943, name: 'Kudu-15' },
-  { lat: 18.2845919, lng: 42.674786, name: 'Kudu-16' },
-  { lat: 24.7447166, lng: 46.6209185999999, name: 'Kudu-18035' },
-  { lat: 24.6905735, lng: 46.7231741, name: 'Kudu-10820' },
-  { lat: 24.7595125, lng: 46.7778203999999, name: 'Kudu-19' },
-  { lat: 24.7601287, lng: 46.7177439999999, name: 'Kudu-12780' },
-  { lat: 24.7866665, lng: 46.6337883, name: 'Kudu-16917' },
-  { lat: 25.3480524999999, lng: 49.6090797999999, name: 'Kudu-22' },
-  { lat: 26.9512082999999, lng: 49.6598861999999, name: 'Kudu-23' },
-  { lat: 26.3642251, lng: 50.2002842, name: 'Kudu-24' },
-  { lat: 27.0125238999999, lng: 49.6418256, name: 'Kudu-25' },
-  { lat: 26.4208039, lng: 50.0234182999999, name: 'Kudu-26' },
-  { lat: 25.4001815, lng: 49.5759334, name: 'Kudu-27' },
-  { lat: 25.9251258, lng: 49.6575882, name: 'Kudu-28' },
-  { lat: 26.5436382999999, lng: 50.0204545, name: 'Kudu-29' },
-  { lat: 26.183802, lng: 50.1853042, name: 'Kudu-30' },
-  { lat: 26.3237220999999, lng: 50.1648165, name: 'Kudu-31' },
-  { lat: 26.1721583999999, lng: 50.1621235, name: 'Kudu-32' },
-  { lat: 26.2348677, lng: 49.9891532, name: 'Kudu-33' },
-  { lat: 26.3425579, lng: 49.995624, name: 'Kudu-34' },
-  { lat: 26.2870979, lng: 50.1837467999999, name: 'Kudu-35' },
-  { lat: 26.30465, lng: 50.169928, name: 'Kudu-36' },
-  { lat: 26.3141286999999, lng: 50.1481738999999, name: 'Kudu-37' },
-  { lat: 27.1334119, lng: 49.5268557, name: 'Kudu-38' },
-  { lat: 27.1698815, lng: 49.5416011999999, name: 'Kudu-39' },
-  { lat: 27.0040111, lng: 49.6593944, name: 'Kudu-40' },
-  { lat: 27.1300676999999, lng: 49.568219, name: 'Kudu-41' },
-  { lat: 27.1363974999999, lng: 49.5683702, name: 'Kudu-42' },
-  { lat: 26.9904956, lng: 49.6597793, name: 'Kudu-43' },
-  { lat: 27.1370908, lng: 49.5684232, name: 'Kudu-44' },
-  { lat: 25.3618515, lng: 49.5536881999999, name: 'Kudu-45' },
-  { lat: 24.7236695999999, lng: 46.6647241, name: 'Kudu-46' },
-  { lat: 25.3475061999999, lng: 49.5903747, name: 'Kudu-47' },
-  { lat: 24.8213346999999, lng: 50.7325881999999, name: 'Kudu-48' },
-  { lat: 24.8126769999999, lng: 46.7711843999999, name: 'Kudu-49' },
-  { lat: 24.6663876, lng: 46.7244290999999, name: 'Kudu-50' },
-  { lat: 24.8178002, lng: 46.7317931, name: 'Kudu-12343' },
-  { lat: 24.8079933999999, lng: 46.6705265999999, name: 'Kudu-52' },
-  { lat: 24.6845429999999, lng: 46.793524, name: 'Kudu-14312' },
-  { lat: 24.6626932999999, lng: 46.7010395, name: 'Kudu-11131' },
-  { lat: 24.8164916, lng: 46.5914826, name: 'Kudu-14100' },
-  { lat: 24.6850603, lng: 46.6778853, name: 'Kudu-12052' },
-  { lat: 24.7322925999999, lng: 46.6758245, name: 'Kudu-14464' },
-  { lat: 24.7062308, lng: 46.766815, name: 'Kudu-58' },
-  { lat: 24.7775879, lng: 46.7075818, name: 'Kudu-13868' },
-  { lat: 24.7629223999999, lng: 46.698101, name: 'Kudu-11580' },
-  { lat: 24.7796096999999, lng: 46.8313864, name: 'Kudu-11631' },
-  { lat: 24.7060216, lng: 46.8358506999999, name: 'Kudu-11379' },
-  { lat: 24.5902140999999, lng: 46.6275112999999, name: 'Kudu-15597' },
-  { lat: 24.7443498, lng: 46.6570612999999, name: 'Kudu-64' },
-  { lat: 24.7254848, lng: 46.6528189, name: 'Kudu-65' },
-  { lat: 24.6743992, lng: 46.8196757, name: 'Kudu-66' },
-  { lat: 24.690067, lng: 46.6865789999999, name: 'Kudu-67' },
-  { lat: 24.6987354, lng: 46.7360293, name: 'Kudu-68' },
-  { lat: 24.588936, lng: 46.7595789999999, name: 'Kudu-69' },
-  { lat: 24.6882616999999, lng: 46.7655358999999, name: 'Kudu-70' },
-  { lat: 24.7993213, lng: 46.5952672999999, name: 'Kudu-71' },
-  { lat: 24.8744124, lng: 46.6162056, name: 'Kudu-17498' },
-  { lat: 24.7897532999999, lng: 46.6333347, name: 'Kudu-73' },
-  { lat: 24.7828072999999, lng: 46.7303287999999, name: 'Kudu-74' },
-  { lat: 24.761806, lng: 46.62569, name: 'Kudu-75' },
-  { lat: 24.8064774, lng: 46.6930194, name: 'Kudu-12205' },
-  { lat: 24.7965272, lng: 46.6545826, name: 'Kudu-77' },
-  { lat: 24.7987655, lng: 46.8565141, name: 'Kudu-78' },
-  { lat: 24.7508013, lng: 46.5732751, name: 'Kudu-79' },
-  { lat: 24.7849419999999, lng: 46.6614231999999, name: 'Kudu-10770' },
-  { lat: 24.5540263999999, lng: 46.8887128999999, name: 'Kudu-81' },
-  { lat: 24.5464955, lng: 46.6509557, name: 'Kudu-82' },
-  { lat: 24.5962875, lng: 46.6975292, name: 'Kudu-83' },
-  { lat: 24.6953911, lng: 46.7286582, name: 'Kudu-84' },
-  { lat: 24.634031, lng: 46.6754258, name: 'Kudu-85' },
-  { lat: 24.6254845, lng: 46.6891271999999, name: 'Kudu-86' },
-  { lat: 24.6659907, lng: 46.6210403, name: 'Kudu-87' },
-  { lat: 24.6729494999999, lng: 46.6734335999999, name: 'Kudu-88' },
-  { lat: 24.5768019999999, lng: 46.8285039999999, name: 'Kudu-89' },
-  { lat: 24.5997505, lng: 46.7460746, name: 'Kudu-90' },
-  { lat: 24.6811625, lng: 46.6230535, name: 'Kudu-91' },
-  { lat: 24.6847189999999, lng: 46.7754179999999, name: 'Kudu-92' },
-  { lat: 24.5986925, lng: 46.6894288999999, name: 'Kudu-93' },
-  { lat: 24.5550775, lng: 46.7621210999999, name: 'Kudu-94' },
-  { lat: 24.6364934, lng: 46.5893321, name: 'Kudu-95' },
-  { lat: 24.5578993, lng: 46.6365793999999, name: 'Kudu-96' },
-  { lat: 24.6034296, lng: 46.7324641, name: 'Kudu-15077' },
-  { lat: 24.5424191, lng: 46.8996974999999, name: 'Kudu-98' },
-  { lat: 24.6283478999999, lng: 46.5595985, name: 'Kudu-99' },
-  { lat: 24.1409731, lng: 47.2825145, name: 'Kudu-100' },
-  { lat: 24.1586116999999, lng: 47.3266670999999, name: 'Kudu-101' },
-  { lat: 24.6421776, lng: 46.5437402999999, name: 'Kudu-102' },
-  { lat: 24.1606527, lng: 47.3108885, name: 'Kudu-103' },
-  { lat: 24.1537671999999, lng: 47.3191707999999, name: 'Kudu-104' },
-  { lat: 24.1566956, lng: 47.3506098999999, name: 'Kudu-105' },
-  { lat: 24.710527, lng: 46.693633, name: 'Kudu-13415' },
-  { lat: 26.3964194, lng: 43.9255326, name: 'Kudu-107' },
-  { lat: 26.3291875, lng: 43.9606875, name: 'Kudu-108' },
-  { lat: 25.6370474, lng: 45.7401257, name: 'Kudu-109' },
-  { lat: 26.0768250999999, lng: 43.9808788, name: 'Kudu-110' },
-  { lat: 24.5162451, lng: 44.4106589999999, name: 'Kudu-111' },
-  { lat: 26.3051304999999, lng: 44.8303918, name: 'Kudu-112' },
-  { lat: 26.2015818999999, lng: 44.128661, name: 'Kudu-113' },
-  { lat: 26.1440026999999, lng: 43.6517747, name: 'Kudu-114' },
-  { lat: 25.8676873, lng: 43.491183, name: 'Kudu-115' },
-  { lat: 25.8625901, lng: 43.5121834, name: 'Kudu-116' },
-  { lat: 26.3675303, lng: 43.962719, name: 'Kudu-117' },
-  { lat: 26.3739976, lng: 43.9371463999999, name: 'Kudu-118' },
-  { lat: 25.9105378, lng: 45.3459816999999, name: 'Kudu-119' },
-  { lat: 24.4625099, lng: 46.3001196999999, name: 'Kudu-120' },
-  { lat: 26.09093, lng: 43.98918, name: 'Kudu-121' },
-  { lat: 26.3168759999999, lng: 44.0348909999999, name: 'Kudu-122' },
-  { lat: 27.4401972999999, lng: 41.6112432, name: 'Kudu-123' },
-  { lat: 27.532242, lng: 41.6592489999999, name: 'Kudu-124' },
-  { lat: 27.5065887, lng: 41.6989984, name: 'Kudu-125' },
-  { lat: 28.4177805, lng: 36.5820424, name: 'Kudu-126' },
-  { lat: 28.4317152, lng: 36.5251549, name: 'Kudu-127' },
-  { lat: 28.4288125, lng: 36.5739375, name: 'Kudu-128' },
-  { lat: 29.8677998999999, lng: 40.2189713, name: 'Kudu-129' },
-  { lat: 30.4918263999999, lng: 38.1990951, name: 'Kudu-130' },
-  { lat: 29.9637678999999, lng: 40.1960761, name: 'Kudu-131' },
-  { lat: 28.3812736999999, lng: 36.5876899999999, name: 'Kudu-132' },
-  { lat: 28.4005501999999, lng: 36.563482, name: 'Kudu-133' },
-  { lat: 30.9748150999999, lng: 41.0117925, name: 'Kudu-134' },
-  { lat: 30.9861763, lng: 41.0265197999999, name: 'Kudu-135' },
-  { lat: 29.6246719, lng: 43.5110145999999, name: 'Kudu-136' },
-  { lat: 28.4424223999999, lng: 46.0051571, name: 'Kudu-137' },
-  { lat: 28.3990629999999, lng: 45.9646587, name: 'Kudu-138' },
-  { lat: 27.9934267999999, lng: 45.5584671, name: 'Kudu-139' },
-  { lat: 28.4218625, lng: 45.9764139, name: 'Kudu-140' },
-  { lat: 28.4273301, lng: 45.9519906999999, name: 'Kudu-141' },
-  { lat: 28.4429220999999, lng: 48.4929278, name: 'Kudu-142' },
-  { lat: 24.0780672999999, lng: 45.3179346, name: 'Kudu-143' },
-  { lat: 23.9051060999999, lng: 42.9141523, name: 'Kudu-144' },
-  { lat: 25.6955849, lng: 39.2954226999999, name: 'Kudu-145' },
-  { lat: 31.6630629999999, lng: 38.649135, name: 'Kudu-146' },
-  { lat: 31.3368872, lng: 37.3302634, name: 'Kudu-147' },
-  { lat: 29.7992293999999, lng: 39.8685057, name: 'Kudu-148' },
-  { lat: 31.450359, lng: 37.1495112, name: 'Kudu-149' },
-  { lat: 29.9613573999999, lng: 40.2220875, name: 'Kudu-150' },
-  { lat: 24.4710415, lng: 39.6551338999999, name: 'Kudu-151' },
-  { lat: 24.4876437, lng: 39.5785811999999, name: 'Kudu-152' },
-  { lat: 24.4463568, lng: 39.6199383, name: 'Kudu-153' },
-  { lat: 24.0175616999999, lng: 38.1976681999999, name: 'Kudu-154' },
-  { lat: 24.471655, lng: 39.612277, name: 'Kudu-155' },
-  { lat: 24.4557523999999, lng: 39.5442611, name: 'Kudu-156' },
-  { lat: 24.4313471999999, lng: 39.5831629, name: 'Kudu-157' },
-  { lat: 24.4857014, lng: 39.6399808, name: 'Kudu-158' },
-  { lat: 24.0930704, lng: 38.0403623, name: 'Kudu-159' },
-  { lat: 24.0835978999999, lng: 38.0824948, name: 'Kudu-160' },
-  { lat: 21.6135216, lng: 39.1545777, name: 'Kudu-161' },
-  { lat: 21.445687, lng: 39.860977, name: 'Kudu-162' },
-  { lat: 21.6084846, lng: 39.1297736, name: 'Kudu-163' },
-  { lat: 21.2573890999999, lng: 40.4616897, name: 'Kudu-164' },
-  { lat: 21.4492169999999, lng: 40.502598, name: 'Kudu-165' },
-  { lat: 21.5570421999999, lng: 39.1700437, name: 'Kudu-166' },
-  { lat: 21.3912151999999, lng: 39.8842439, name: 'Kudu-167' },
-  { lat: 21.5173846999999, lng: 39.1655504999999, name: 'Kudu-168' },
-  { lat: 21.6326459999999, lng: 39.155477, name: 'Kudu-169' },
-  { lat: 21.4101121, lng: 39.8667462999999, name: 'Kudu-170' },
-  { lat: 21.3976023, lng: 39.790624, name: 'Kudu-171' },
-  { lat: 21.6446908, lng: 39.1289669999999, name: 'Kudu-172' },
-  { lat: 21.5518745, lng: 39.2148764999999, name: 'Kudu-173' },
-  { lat: 21.576548, lng: 39.195977, name: 'Kudu-174' },
-  { lat: 21.2568211, lng: 40.4094596, name: 'Kudu-175' },
-  { lat: 21.584227, lng: 39.21798, name: 'Kudu-176' },
-  { lat: 21.4195083999999, lng: 39.8238106, name: 'Kudu-177' },
-  { lat: 21.3960902, lng: 39.7930054, name: 'Kudu-178' },
-  { lat: 21.7547616, lng: 39.1864537999999, name: 'Kudu-179' },
-  { lat: 21.4411712, lng: 39.2801308999999, name: 'Kudu-180' },
-  { lat: 21.423382, lng: 39.3130729999999, name: 'Kudu-181' },
-  { lat: 21.627883, lng: 39.110541, name: 'Kudu-182' },
-  { lat: 21.526273, lng: 39.1757598999999, name: 'Kudu-183' },
-  { lat: 21.7998691, lng: 39.1424547999999, name: 'Kudu-184' },
-  { lat: 21.4028785, lng: 39.7979263, name: 'Kudu-185' },
-  { lat: 21.3811321, lng: 39.7871854, name: 'Kudu-186' },
-  { lat: 21.3450862, lng: 39.7542343, name: 'Kudu-187' },
-  { lat: 21.4559174999999, lng: 39.9506748, name: 'Kudu-188' },
-  { lat: 21.2743771, lng: 40.4245680999999, name: 'Kudu-189' },
-  { lat: 19.8833959999999, lng: 41.567901, name: 'Kudu-190' },
-  { lat: 20.0399592, lng: 41.4957566, name: 'Kudu-191' },
-  { lat: 18.2591131, lng: 42.7468099999999, name: 'Kudu-192' },
-  { lat: 18.3076863, lng: 42.7549977, name: 'Kudu-193' },
-  { lat: 18.2802057, lng: 42.5935817999999, name: 'Kudu-194' },
-  { lat: 18.2317078, lng: 42.5560322, name: 'Kudu-195' },
-  { lat: 18.3240403, lng: 42.6948852999999, name: 'Kudu-196' },
-  { lat: 18.5520803999999, lng: 42.0381549999999, name: 'Kudu-197' },
-  { lat: 20.0054069999999, lng: 42.6214462, name: 'Kudu-198' },
-  { lat: 20.4600097, lng: 44.8066332, name: 'Kudu-199' },
-  { lat: 16.9053465999999, lng: 42.5439816999999, name: 'Kudu-200' },
-  { lat: 24.6933139999999, lng: 46.604842, name: 'Kudu-18375' },
-  { lat: 24.4715247, lng: 39.6514884, name: 'Kudu-202' },
-  { lat: 24.7576593, lng: 46.6742144, name: 'Kudu-14138' },
-  { lat: 24.7094973526216, lng: 46.7889549639685, name: 'Kudu-19673' },
-  { lat: 24.7508514531688, lng: 46.8524757788844, name: 'Kudu-19008' },
-  { lat: 24.5493202272803, lng: 46.6971105594098, name: 'Kudu-18947' },
-  { lat: 24.8208377045598, lng: 46.6410275670304, name: 'Kudu-18512' },
-  { lat: 24.8579572021502, lng: 46.6468200694052, name: 'Kudu-20181' },
-  { lat: 24.8266998219779, lng: 46.6554605705637, name: 'Kudu-16896' },
-  { lat: 24.7313841341874, lng: 46.7848757359103, name: 'Kudu-15728' },
-  { lat: 24.6523628600102, lng: 46.4967775223489, name: 'Kudu-13457' },
-  { lat: 24.5890435838998, lng: 46.6911881943878, name: 'Kudu-12983' },
-  { lat: 24.8406392048828, lng: 46.7873663563612, name: 'Kudu-12884' },
-  { lat: 24.7668546741588, lng: 46.755333198052, name: 'Kudu-12865' },
-  { lat: 24.687452685261, lng: 46.8491266217945, name: 'Kudu-12844' },
-  { lat: 24.5906401239287, lng: 46.6514005881509, name: 'Kudu-12321' },
-  { lat: 24.7919190824962, lng: 46.8620087533738, name: 'Kudu-12054' },
-  { lat: 24.8054925762516, lng: 46.7991396056672, name: 'Kudu-12005' },
-  { lat: 24.8416218673799, lng: 46.7509006672099, name: 'Kudu-11994' },
-  { lat: 24.5307716246386, lng: 46.6525011681607, name: 'Kudu-11989' },
-  { lat: 24.7794959975547, lng: 46.7884210533947, name: 'Kudu-11345' },
-  { lat: 24.5530755823587, lng: 46.5684535092679, name: 'Kudu-11196' },
-  { lat: 24.7447841237233, lng: 46.7558973535151, name: 'Kudu-10735' },
+ { lat: 26.4420175, lng: 50.1177564, name: 'Kudu-1', متميز: false },
+ { lat: 26.4004504, lng: 50.1150443, name: 'Kudu-2', متميز: false },
+ { lat: 26.4844941, lng: 50.0535079, name: 'Kudu-3', متميز: false },
+ { lat: 26.4028472999999, lng: 50.1009764, name: 'Kudu-4', متميز: false },
+ { lat: 26.430625, lng: 50.0670079999999, name: 'Kudu-5', متميز: false },
+ { lat: 26.4151685999999, lng: 50.1175267, name: 'Kudu-6', متميز: false },
+ { lat: 26.3050104, lng: 50.1967273, name: 'Kudu-7', متميز: false },
+ { lat: 26.4622852, lng: 50.0642792999999, name: 'Kudu-8', متميز: false },
+ { lat: 26.412163, lng: 50.046127, name: 'Kudu-9', متميز: false },
+ { lat: 26.2792681, lng: 50.208064, name: 'Kudu-10', متميز: false },
+ { lat: 26.3860893, lng: 50.1782225, name: 'Kudu-11', متميز: false },
+ { lat: 26.3687859, lng: 50.0538953999999, name: 'Kudu-12', متميز: false },
+ { lat: 26.706455, lng: 50.0522716, name: 'Kudu-13', متميز: false },
+ { lat: 26.4102575999999, lng: 50.0335185, name: 'Kudu-14', متميز: false },
+ { lat: 21.5834159, lng: 39.153943, name: 'Kudu-15', متميز: false },
+ { lat: 18.2845919, lng: 42.674786, name: 'Kudu-16', متميز: false },
+ { lat: 24.7447166, lng: 46.6209185999999, name: 'Kudu-18035', متميز: true },
+ { lat: 24.6905735, lng: 46.7231741, name: 'Kudu-10820', متميز: true },
+ { lat: 24.7595125, lng: 46.7778203999999, name: 'Kudu-19', متميز: false },
+ { lat: 24.7601287, lng: 46.7177439999999, name: 'Kudu-12780', متميز: true },
+ { lat: 24.7866665, lng: 46.6337883, name: 'Kudu-16917', متميز: true },
+ { lat: 25.3480524999999, lng: 49.6090797999999, name: 'Kudu-22', متميز: false },
+ { lat: 26.9512082999999, lng: 49.6598861999999, name: 'Kudu-23', متميز: false },
+ { lat: 26.3642251, lng: 50.2002842, name: 'Kudu-24', متميز: false },
+ { lat: 27.0125238999999, lng: 49.6418256, name: 'Kudu-25', متميز: false },
+ { lat: 26.4208039, lng: 50.0234182999999, name: 'Kudu-26', متميز: false },
+ { lat: 25.4001815, lng: 49.5759334, name: 'Kudu-27', متميز: false },
+ { lat: 25.9251258, lng: 49.6575882, name: 'Kudu-28', متميز: false },
+ { lat: 26.5436382999999, lng: 50.0204545, name: 'Kudu-29', متميز: false },
+ { lat: 26.183802, lng: 50.1853042, name: 'Kudu-30', متميز: false },
+ { lat: 26.3237220999999, lng: 50.1648165, name: 'Kudu-31', متميز: false },
+ { lat: 26.1721583999999, lng: 50.1621235, name: 'Kudu-32', متميز: false },
+ { lat: 26.2348677, lng: 49.9891532, name: 'Kudu-33', متميز: false },
+ { lat: 26.3425579, lng: 49.995624, name: 'Kudu-34', متميز: false },
+ { lat: 26.2870979, lng: 50.1837467999999, name: 'Kudu-35', متميز: false },
+ { lat: 26.30465, lng: 50.169928, name: 'Kudu-36', متميز: false },
+ { lat: 26.3141286999999, lng: 50.1481738999999, name: 'Kudu-37', متميز: false },
+ { lat: 27.1334119, lng: 49.5268557, name: 'Kudu-38', متميز: false },
+ { lat: 27.1698815, lng: 49.5416011999999, name: 'Kudu-39', متميز: false },
+ { lat: 27.0040111, lng: 49.6593944, name: 'Kudu-40', متميز: false },
+ { lat: 27.1300676999999, lng: 49.568219, name: 'Kudu-41', متميز: false },
+ { lat: 27.1363974999999, lng: 49.5683702, name: 'Kudu-42', متميز: false },
+ { lat: 26.9904956, lng: 49.6597793, name: 'Kudu-43', متميز: false },
+ { lat: 27.1370908, lng: 49.5684232, name: 'Kudu-44', متميز: false },
+ { lat: 25.3618515, lng: 49.5536881999999, name: 'Kudu-45', متميز: false },
+ { lat: 24.7236695999999, lng: 46.6647241, name: 'Kudu-46', متميز: false },
+ { lat: 25.3475061999999, lng: 49.5903747, name: 'Kudu-47', متميز: false },
+ { lat: 24.8213346999999, lng: 50.7325881999999, name: 'Kudu-48', متميز: false },
+ { lat: 24.8126769999999, lng: 46.7711843999999, name: 'Kudu-49', متميز: false },
+ { lat: 24.6663876, lng: 46.7244290999999, name: 'Kudu-50', متميز: false },
+ { lat: 24.8178002, lng: 46.7317931, name: 'Kudu-12343', متميز: true },
+ { lat: 24.8079933999999, lng: 46.6705265999999, name: 'Kudu-52', متميز: false },
+ { lat: 24.6845429999999, lng: 46.793524, name: 'Kudu-14312', متميز: true },
+ { lat: 24.6626932999999, lng: 46.7010395, name: 'Kudu-11131', متميز: true },
+ { lat: 24.8164916, lng: 46.5914826, name: 'Kudu-14100', متميز: true },
+ { lat: 24.6850603, lng: 46.6778853, name: 'Kudu-12052', متميز: true },
+ { lat: 24.7322925999999, lng: 46.6758245, name: 'Kudu-14464', متميز: true },
+ { lat: 24.7062308, lng: 46.766815, name: 'Kudu-58', متميز: false },
+ { lat: 24.7775879, lng: 46.7075818, name: 'Kudu-13868', متميز: true },
+ { lat: 24.7629223999999, lng: 46.698101, name: 'Kudu-11580', متميز: true },
+ { lat: 24.7796096999999, lng: 46.8313864, name: 'Kudu-11631', متميز: true },
+ { lat: 24.7060216, lng: 46.8358506999999, name: 'Kudu-11379', متميز: true },
+ { lat: 24.5902140999999, lng: 46.6275112999999, name: 'Kudu-15597', متميز: true },
+ { lat: 24.7443498, lng: 46.6570612999999, name: 'Kudu-64', متميز: false },
+ { lat: 24.7254848, lng: 46.6528189, name: 'Kudu-65', متميز: false },
+ { lat: 24.6743992, lng: 46.8196757, name: 'Kudu-66', متميز: false },
+ { lat: 24.690067, lng: 46.6865789999999, name: 'Kudu-67', متميز: false },
+ { lat: 24.6987354, lng: 46.7360293, name: 'Kudu-68', متميز: false },
+ { lat: 24.588936, lng: 46.7595789999999, name: 'Kudu-69', متميز: false },
+ { lat: 24.6882616999999, lng: 46.7655358999999, name: 'Kudu-70', متميز: false },
+ { lat: 24.7993213, lng: 46.5952672999999, name: 'Kudu-71', متميز: false },
+ { lat: 24.8744124, lng: 46.6162056, name: 'Kudu-17498', متميز: true },
+ { lat: 24.7897532999999, lng: 46.6333347, name: 'Kudu-73', متميز: false },
+ { lat: 24.7828072999999, lng: 46.7303287999999, name: 'Kudu-74', متميز: false },
+ { lat: 24.761806, lng: 46.62569, name: 'Kudu-75', متميز: false },
+ { lat: 24.8064774, lng: 46.6930194, name: 'Kudu-12205', متميز: true },
+ { lat: 24.7965272, lng: 46.6545826, name: 'Kudu-77', متميز: false },
+ { lat: 24.7987655, lng: 46.8565141, name: 'Kudu-78', متميز: false },
+ { lat: 24.7508013, lng: 46.5732751, name: 'Kudu-79', متميز: false },
+ { lat: 24.7849419999999, lng: 46.6614231999999, name: 'Kudu-10770', متميز: true },
+ { lat: 24.5540263999999, lng: 46.8887128999999, name: 'Kudu-81', متميز: false },
+ { lat: 24.5464955, lng: 46.6509557, name: 'Kudu-82', متميز: false },
+ { lat: 24.5962875, lng: 46.6975292, name: 'Kudu-83', متميز: false },
+ { lat: 24.6953911, lng: 46.7286582, name: 'Kudu-84', متميز: false },
+ { lat: 24.634031, lng: 46.6754258, name: 'Kudu-85', متميز: false },
+ { lat: 24.6254845, lng: 46.6891271999999, name: 'Kudu-86', متميز: false },
+ { lat: 24.6659907, lng: 46.6210403, name: 'Kudu-87', متميز: false },
+ { lat: 24.6729494999999, lng: 46.6734335999999, name: 'Kudu-88', متميز: false },
+ { lat: 24.5768019999999, lng: 46.8285039999999, name: 'Kudu-89', متميز: false },
+ { lat: 24.5997505, lng: 46.7460746, name: 'Kudu-90', متميز: false },
+ { lat: 24.6811625, lng: 46.6230535, name: 'Kudu-91', متميز: false },
+ { lat: 24.6847189999999, lng: 46.7754179999999, name: 'Kudu-92', متميز: false },
+ { lat: 24.5986925, lng: 46.6894288999999, name: 'Kudu-93', متميز: false },
+ { lat: 24.5550775, lng: 46.7621210999999, name: 'Kudu-94', متميز: false },
+ { lat: 24.6364934, lng: 46.5893321, name: 'Kudu-95', متميز: false },
+ { lat: 24.5578993, lng: 46.6365793999999, name: 'Kudu-96', متميز: false },
+ { lat: 24.6034296, lng: 46.7324641, name: 'Kudu-15077', متميز: true },
+ { lat: 24.5424191, lng: 46.8996974999999, name: 'Kudu-98', متميز: false },
+ { lat: 24.6283478999999, lng: 46.5595985, name: 'Kudu-99', متميز: false },
+ { lat: 24.1409731, lng: 47.2825145, name: 'Kudu-100', متميز: false },
+ { lat: 24.1586116999999, lng: 47.3266670999999, name: 'Kudu-101', متميز: false },
+ { lat: 24.6421776, lng: 46.5437402999999, name: 'Kudu-102', متميز: false },
+ { lat: 24.1606527, lng: 47.3108885, name: 'Kudu-103', متميز: false },
+ { lat: 24.1537671999999, lng: 47.3191707999999, name: 'Kudu-104', متميز: false },
+ { lat: 24.1566956, lng: 47.3506098999999, name: 'Kudu-105', متميز: false },
+ { lat: 24.710527, lng: 46.693633, name: 'Kudu-13415', متميز: true },
+ { lat: 26.3964194, lng: 43.9255326, name: 'Kudu-107', متميز: false },
+ { lat: 26.3291875, lng: 43.9606875, name: 'Kudu-108', متميز: false },
+ { lat: 25.6370474, lng: 45.7401257, name: 'Kudu-109', متميز: false },
+ { lat: 26.0768250999999, lng: 43.9808788, name: 'Kudu-110', متميز: false },
+ { lat: 24.5162451, lng: 44.4106589999999, name: 'Kudu-111', متميز: false },
+ { lat: 26.3051304999999, lng: 44.8303918, name: 'Kudu-112', متميز: false },
+ { lat: 26.2015818999999, lng: 44.128661, name: 'Kudu-113', متميز: false },
+ { lat: 26.1440026999999, lng: 43.6517747, name: 'Kudu-114', متميز: false },
+ { lat: 25.8676873, lng: 43.491183, name: 'Kudu-115', متميز: false },
+ { lat: 25.8625901, lng: 43.5121834, name: 'Kudu-116', متميز: false },
+ { lat: 26.3675303, lng: 43.962719, name: 'Kudu-117', متميز: false },
+ { lat: 26.3739976, lng: 43.9371463999999, name: 'Kudu-118', متميز: false },
+ { lat: 25.9105378, lng: 45.3459816999999, name: 'Kudu-119', متميز: false },
+ { lat: 24.4625099, lng: 46.3001196999999, name: 'Kudu-120', متميز: false },
+ { lat: 26.09093, lng: 43.98918, name: 'Kudu-121', متميز: false },
+ { lat: 26.3168759999999, lng: 44.0348909999999, name: 'Kudu-122', متميز: false },
+ { lat: 27.4401972999999, lng: 41.6112432, name: 'Kudu-123', متميز: false },
+ { lat: 27.532242, lng: 41.6592489999999, name: 'Kudu-124', متميز: false },
+ { lat: 27.5065887, lng: 41.6989984, name: 'Kudu-125', متميز: false },
+ { lat: 28.4177805, lng: 36.5820424, name: 'Kudu-126', متميز: false },
+ { lat: 28.4317152, lng: 36.5251549, name: 'Kudu-127', متميز: false },
+ { lat: 28.4288125, lng: 36.5739375, name: 'Kudu-128', متميز: false },
+ { lat: 29.8677998999999, lng: 40.2189713, name: 'Kudu-129', متميز: false },
+ { lat: 30.4918263999999, lng: 38.1990951, name: 'Kudu-130', متميز: false },
+ { lat: 29.9637678999999, lng: 40.1960761, name: 'Kudu-131', متميز: false },
+ { lat: 28.3812736999999, lng: 36.5876899999999, name: 'Kudu-132', متميز: false },
+ { lat: 28.4005501999999, lng: 36.563482, name: 'Kudu-133', متميز: false },
+ { lat: 30.9748150999999, lng: 41.0117925, name: 'Kudu-134', متميز: false },
+ { lat: 30.9861763, lng: 41.0265197999999, name: 'Kudu-135', متميز: false },
+ { lat: 29.6246719, lng: 43.5110145999999, name: 'Kudu-136', متميز: false },
+ { lat: 28.4424223999999, lng: 46.0051571, name: 'Kudu-137', متميز: false },
+ { lat: 28.3990629999999, lng: 45.9646587, name: 'Kudu-138', متميز: false },
+ { lat: 27.9934267999999, lng: 45.5584671, name: 'Kudu-139', متميز: false },
+ { lat: 28.4218625, lng: 45.9764139, name: 'Kudu-140', متميز: false },
+ { lat: 28.4273301, lng: 45.9519906999999, name: 'Kudu-141', متميز: false },
+ { lat: 28.4429220999999, lng: 48.4929278, name: 'Kudu-142', متميز: false },
+ { lat: 24.0780672999999, lng: 45.3179346, name: 'Kudu-143', متميز: false },
+ { lat: 23.9051060999999, lng: 42.9141523, name: 'Kudu-144', متميز: false },
+ { lat: 25.6955849, lng: 39.2954226999999, name: 'Kudu-145', متميز: false },
+ { lat: 31.6630629999999, lng: 38.649135, name: 'Kudu-146', متميز: false },
+ { lat: 31.3368872, lng: 37.3302634, name: 'Kudu-147', متميز: false },
+ { lat: 29.7992293999999, lng: 39.8685057, name: 'Kudu-148', متميز: false },
+ { lat: 31.450359, lng: 37.1495112, name: 'Kudu-149', متميز: false },
+ { lat: 29.9613573999999, lng: 40.2220875, name: 'Kudu-150', متميز: false },
+ { lat: 24.4710415, lng: 39.6551338999999, name: 'Kudu-151', متميز: false },
+ { lat: 24.4876437, lng: 39.5785811999999, name: 'Kudu-152', متميز: false },
+ { lat: 24.4463568, lng: 39.6199383, name: 'Kudu-153', متميز: false },
+ { lat: 24.0175616999999, lng: 38.1976681999999, name: 'Kudu-154', متميز: false },
+ { lat: 24.471655, lng: 39.612277, name: 'Kudu-155', متميز: false },
+ { lat: 24.4557523999999, lng: 39.5442611, name: 'Kudu-156', متميز: false },
+ { lat: 24.4313471999999, lng: 39.5831629, name: 'Kudu-157', متميز: false },
+ { lat: 24.4857014, lng: 39.6399808, name: 'Kudu-158', متميز: false },
+ { lat: 24.0930704, lng: 38.0403623, name: 'Kudu-159', متميز: false },
+ { lat: 24.0835978999999, lng: 38.0824948, name: 'Kudu-160', متميز: false },
+ { lat: 21.6135216, lng: 39.1545777, name: 'Kudu-161', متميز: false },
+ { lat: 21.445687, lng: 39.860977, name: 'Kudu-162', متميز: false },
+ { lat: 21.6084846, lng: 39.1297736, name: 'Kudu-163', متميز: false },
+ { lat: 21.2573890999999, lng: 40.4616897, name: 'Kudu-164', متميز: false },
+ { lat: 21.4492169999999, lng: 40.502598, name: 'Kudu-165', متميز: false },
+ { lat: 21.5570421999999, lng: 39.1700437, name: 'Kudu-166', متميز: false },
+ { lat: 21.3912151999999, lng: 39.8842439, name: 'Kudu-167', متميز: false },
+ { lat: 21.5173846999999, lng: 39.1655504999999, name: 'Kudu-168', متميز: false },
+ { lat: 21.6326459999999, lng: 39.155477, name: 'Kudu-169', متميز: false },
+ { lat: 21.4101121, lng: 39.8667462999999, name: 'Kudu-170', متميز: false },
+ { lat: 21.3976023, lng: 39.790624, name: 'Kudu-171', متميز: false },
+ { lat: 21.6446908, lng: 39.1289669999999, name: 'Kudu-172', متميز: false },
+ { lat: 21.5518745, lng: 39.2148764999999, name: 'Kudu-173', متميز: false },
+ { lat: 21.576548, lng: 39.195977, name: 'Kudu-174', متميز: false },
+ { lat: 21.2568211, lng: 40.4094596, name: 'Kudu-175', متميز: false },
+ { lat: 21.584227, lng: 39.21798, name: 'Kudu-176', متميز: false },
+ { lat: 21.4195083999999, lng: 39.8238106, name: 'Kudu-177', متميز: false },
+ { lat: 21.3960902, lng: 39.7930054, name: 'Kudu-178', متميز: false },
+ { lat: 21.7547616, lng: 39.1864537999999, name: 'Kudu-179', متميز: false },
+ { lat: 21.4411712, lng: 39.2801308999999, name: 'Kudu-180', متميز: false },
+ { lat: 21.423382, lng: 39.3130729999999, name: 'Kudu-181', متميز: false },
+ { lat: 21.627883, lng: 39.110541, name: 'Kudu-182', متميز: false },
+ { lat: 21.526273, lng: 39.1757598999999, name: 'Kudu-183', متميز: false },
+ { lat: 21.7998691, lng: 39.1424547999999, name: 'Kudu-184', متميز: false },
+ { lat: 21.4028785, lng: 39.7979263, name: 'Kudu-185', متميز: false },
+ { lat: 21.3811321, lng: 39.7871854, name: 'Kudu-186', متميز: false },
+ { lat: 21.3450862, lng: 39.7542343, name: 'Kudu-187', متميز: false },
+ { lat: 21.4559174999999, lng: 39.9506748, name: 'Kudu-188', متميز: false },
+ { lat: 21.2743771, lng: 40.4245680999999, name: 'Kudu-189', متميز: false },
+ { lat: 19.8833959999999, lng: 41.567901, name: 'Kudu-190', متميز: false },
+ { lat: 20.0399592, lng: 41.4957566, name: 'Kudu-191', متميز: false },
+ { lat: 18.2591131, lng: 42.7468099999999, name: 'Kudu-192', متميز: false },
+ { lat: 18.3076863, lng: 42.7549977, name: 'Kudu-193', متميز: false },
+ { lat: 18.2802057, lng: 42.5935817999999, name: 'Kudu-194', متميز: false },
+ { lat: 18.2317078, lng: 42.5560322, name: 'Kudu-195', متميز: false },
+ { lat: 18.3240403, lng: 42.6948852999999, name: 'Kudu-196', متميز: false },
+ { lat: 18.5520803999999, lng: 42.0381549999999, name: 'Kudu-197', متميز: false },
+ { lat: 20.0054069999999, lng: 42.6214462, name: 'Kudu-198', متميز: false },
+ { lat: 20.4600097, lng: 44.8066332, name: 'Kudu-199', متميز: false },
+ { lat: 16.9053465999999, lng: 42.5439816999999, name: 'Kudu-200', متميز: false },
+ { lat: 24.6933139999999, lng: 46.604842, name: 'Kudu-18375', متميز: true },
+ { lat: 24.4715247, lng: 39.6514884, name: 'Kudu-202', متميز: false },
+ { lat: 24.7576593, lng: 46.6742144, name: 'Kudu-14138', متميز: true },
+ { lat: 24.7094973526216, lng: 46.7889549639685, name: 'Kudu-19673', متميز: true },
+ { lat: 24.7508514531688, lng: 46.8524757788844, name: 'Kudu-19008', متميز: true },
+ { lat: 24.5493202272803, lng: 46.6971105594098, name: 'Kudu-18947', متميز: true },
+ { lat: 24.8208377045598, lng: 46.6410275670304, name: 'Kudu-18512', متميز: true },
+ { lat: 24.8579572021502, lng: 46.6468200694052, name: 'Kudu-20181', متميز: true },
+ { lat: 24.8266998219779, lng: 46.6554605705637, name: 'Kudu-16896', متميز: true },
+ { lat: 24.7313841341874, lng: 46.7848757359103, name: 'Kudu-15728', متميز: true },
+ { lat: 24.6523628600102, lng: 46.4967775223489, name: 'Kudu-13457', متميز: true },
+ { lat: 24.5890435838998, lng: 46.6911881943878, name: 'Kudu-12983', متميز: true },
+ { lat: 24.8406392048828, lng: 46.7873663563612, name: 'Kudu-12884', متميز: true },
+ { lat: 24.7668546741588, lng: 46.755333198052, name: 'Kudu-12865', متميز: true },
+ { lat: 24.687452685261, lng: 46.8491266217945, name: 'Kudu-12844', متميز: true },
+ { lat: 24.5906401239287, lng: 46.6514005881509, name: 'Kudu-12321', متميز: true },
+ { lat: 24.7919190824962, lng: 46.8620087533738, name: 'Kudu-12054', متميز: true },
+ { lat: 24.8054925762516, lng: 46.7991396056672, name: 'Kudu-12005', متميز: true },
+ { lat: 24.8416218673799, lng: 46.7509006672099, name: 'Kudu-11994', متميز: true },
+ { lat: 24.5307716246386, lng: 46.6525011681607, name: 'Kudu-11989', متميز: true },
+ { lat: 24.7794959975547, lng: 46.7884210533947, name: 'Kudu-11345', متميز: true },
+ { lat: 24.5530755823587, lng: 46.5684535092679, name: 'Kudu-11196', متميز: true },
+ { lat: 24.7447841237233, lng: 46.7558973535151, name: 'Kudu-10735', متميز: true },
+ { lat: 24.7576593, lng: 46.6742144, name: 'kudu-224', متميز: false },
+ { lat: 26.452633, lng: 50.0964559999999, name: 'kudu-225', متميز: false },
+ { lat: 26.4548779999999, lng: 50.105469, name: 'kudu-226', متميز: false },
+ { lat: 26.403869, lng: 50.057627, name: 'kudu-227', متميز: false },
+ { lat: 26.4011203, lng: 50.1168136, name: 'kudu-228', متميز: false },
+ { lat: 26.3745291, lng: 50.1194941, name: 'kudu-229', متميز: false },
+ { lat: 26.3900644999999, lng: 50.0372327, name: 'kudu-230', متميز: false },
+ { lat: 24.7562906, lng: 46.7413264, name: 'kudu-231', متميز: false },
+ { lat: 24.8362144, lng: 46.6831589999999, name: 'kudu-232', متميز: false },
+ { lat: 24.6885799, lng: 46.6506287, name: 'kudu-233', متميز: false },
+ { lat: 24.8355793, lng: 46.8332449, name: 'kudu-234', متميز: false },
+ { lat: 24.7478709, lng: 46.7129755, name: 'kudu-235', متميز: false },
+ { lat: 24.8513582999999, lng: 46.6278776, name: 'kudu-236', متميز: false },
+ { lat: 24.8049237999999, lng: 46.7499539999999, name: 'kudu-237', متميز: false },
+ { lat: 24.6752742999999, lng: 46.7376703, name: 'kudu-238', متميز: false },
+ { lat: 24.8217175, lng: 46.5951814999999, name: 'kudu-239', متميز: false },
+ { lat: 24.729967, lng: 46.784776, name: 'kudu-240', متميز: false },
+ { lat: 24.707639, lng: 46.713111, name: 'kudu-241', متميز: false },
+ { lat: 24.7503508999999, lng: 46.8525428999999, name: 'kudu-242', متميز: false },
+ { lat: 24.7431719999999, lng: 46.80883, name: 'kudu-243', متميز: false },
+ { lat: 24.7451588, lng: 46.776239, name: 'kudu-244', متميز: false },
+ { lat: 24.760348, lng: 46.812763, name: 'kudu-245', متميز: false },
+ { lat: 24.7634592, lng: 46.8015049, name: 'kudu-246', متميز: false },
+ { lat: 24.773856, lng: 46.7763939999999, name: 'kudu-247', متميز: false },
+ { lat: 24.7508439999999, lng: 46.82337, name: 'kudu-248', متميز: false },
+ { lat: 24.7514298, lng: 46.8199207, name: 'kudu-249', متميز: false },
+ { lat: 24.8232969, lng: 46.7991822, name: 'kudu-250', متميز: false },
+ { lat: 24.79028, lng: 46.7663547, name: 'kudu-251', متميز: false },
+ { lat: 24.8044817, lng: 46.7533047999999, name: 'kudu-252', متميز: false },
+ { lat: 24.9199263999999, lng: 46.7958831, name: 'kudu-253', متميز: false },
+ { lat: 24.9613525999999, lng: 46.7025161, name: 'kudu-254', متميز: false },
+ { lat: 24.856935, lng: 46.646868, name: 'kudu-255', متميز: false },
+ { lat: 24.9104362, lng: 46.6196324999999, name: 'kudu-256', متميز: false },
+ { lat: 24.8468783999999, lng: 46.6044021999999, name: 'kudu-257', متميز: false },
+ { lat: 24.8474166, lng: 46.734033, name: 'kudu-258', متميز: false },
+ { lat: 24.8890855999999, lng: 46.6970655, name: 'kudu-259', متميز: false },
+ { lat: 24.8564358999999, lng: 46.647013, name: 'kudu-260', متميز: false },
+ { lat: 24.8235761, lng: 46.6551447, name: 'kudu-261', متميز: false },
+ { lat: 24.787162, lng: 46.706921, name: 'kudu-262', متميز: false },
+ { lat: 24.8284053, lng: 46.7277342, name: 'kudu-263', متميز: false },
+ { lat: 24.767576, lng: 46.7166439999999, name: 'kudu-264', متميز: false },
+ { lat: 24.5666677999999, lng: 46.7900555999999, name: 'kudu-265', متميز: false },
+ { lat: 24.5856675, lng: 46.6915009, name: 'kudu-266', متميز: false },
+ { lat: 24.5714577, lng: 46.6140413, name: 'kudu-267', متميز: false },
+ { lat: 24.7952205, lng: 46.7297903, name: 'kudu-268', متميز: false },
+ { lat: 24.760208, lng: 46.6736952, name: 'kudu-269', متميز: false },
+ { lat: 24.7430099999999, lng: 46.6788819999999, name: 'kudu-270', متميز: false },
+ { lat: 24.7059492, lng: 46.6794972, name: 'kudu-271', متميز: false },
+ { lat: 24.6917597, lng: 46.6699852, name: 'kudu-272', متميز: false },
+ { lat: 24.7681784999999, lng: 46.5770413, name: 'kudu-273', متميز: false },
+ { lat: 24.6462148, lng: 46.4968439999999, name: 'kudu-274', متميز: false },
+ { lat: 24.6652132, lng: 46.6771968, name: 'kudu-275', متميز: false },
+ { lat: 24.5777535, lng: 46.5803146, name: 'kudu-276', متميز: false },
+ { lat: 24.5546939999999, lng: 46.491222, name: 'kudu-277', متميز: false },
+ { lat: 24.5678186, lng: 46.5439420999999, name: 'kudu-278', متميز: false },
+ { lat: 24.5620977, lng: 46.525203, name: 'kudu-279', متميز: false },
+ { lat: 24.562383, lng: 46.682364, name: 'kudu-280', متميز: false },
+ { lat: 24.677127, lng: 46.7366494, name: 'kudu-281', متميز: false },
+ { lat: 24.6936447, lng: 46.7323124, name: 'kudu-282', متميز: false },
+ { lat: 24.6963431999999, lng: 46.7515049, name: 'kudu-283', متميز: false },
+ { lat: 24.6566629999999, lng: 46.8324279, name: 'kudu-284', متميز: false },
+ { lat: 24.656036, lng: 46.8341444, name: 'kudu-285', متميز: false },
+ { lat: 24.6588034, lng: 46.8495065, name: 'kudu-286', متميز: false },
+ { lat: 24.7687506, lng: 46.6047801, name: 'kudu-287', متميز: false },
+ { lat: 24.734121, lng: 46.697496, name: 'kudu-288', متميز: false },
+ { lat: 24.8351439, lng: 46.7654865999999, name: 'kudu-289', متميز: false },
+ { lat: 26.351539, lng: 43.9695709999999, name: 'kudu-290', متميز: false },
+ { lat: 26.0729352, lng: 44.0190266, name: 'kudu-291', متميز: false },
+ { lat: 26.305754, lng: 50.22738, name: 'kudu-292', متميز: false },
+ { lat: 21.5087486, lng: 39.2473996, name: 'kudu-293', متميز: false },
+ { lat: 21.5819422, lng: 39.1654593999999, name: 'kudu-294', متميز: false },
+ { lat: 21.2437227, lng: 40.4172005, name: 'kudu-295', متميز: false },
+ { lat: 21.7617519999999, lng: 39.115688, name: 'kudu-296', متميز: false },
+ { lat: 21.5800308, lng: 39.2299844, name: 'kudu-297', متميز: false },
+ { lat: 21.5940549, lng: 39.2421079, name: 'kudu-298', متميز: false },
+ { lat: 21.7991496999999, lng: 39.0842817, name: 'kudu-299', متميز: false },
+ { lat: 21.3104507, lng: 39.2606021, name: 'kudu-300', متميز: false },
+ { lat: 21.7580779, lng: 39.206402, name: 'kudu-301', متميز: false },
+ { lat: 21.6243101, lng: 39.2099882, name: 'kudu-302', متميز: false },
+ { lat: 21.4706738999999, lng: 39.9289029, name: 'kudu-303', متميز: false },
+ { lat: 21.5750566, lng: 39.7653417, name: 'kudu-304', متميز: false },
+ { lat: 23.0093994, lng: 39.928899, name: 'kudu-305', متميز: false },
+ { lat: 21.3272759999999, lng: 40.0286718, name: 'kudu-306', متميز: false },
+ { lat: 21.4010695, lng: 39.2788383, name: 'kudu-307', متميز: false },
+ { lat: 21.2979597, lng: 40.4267205999999, name: 'kudu-308', متميز: false },
+ { lat: 21.5201298, lng: 39.2227941999999, name: 'kudu-309', متميز: false },
+ { lat: 21.5930347999999, lng: 39.2290716, name: 'kudu-310', متميز: false },
+ { lat: 21.5338888999999, lng: 39.2008333, name: 'kudu-311', متميز: false },
+ { lat: 21.793243, lng: 39.133286, name: 'kudu-312', متميز: false },
+ { lat: 21.6211757, lng: 39.1949851, name: 'kudu-313', متميز: false },
+ { lat: 21.5767591, lng: 39.2195762, name: 'kudu-314', متميز: false },
+ { lat: 21.5566870999999, lng: 39.1848125, name: 'kudu-315', متميز: false },
+ { lat: 21.5311478, lng: 39.2522209, name: 'kudu-316', متميز: false },
+ { lat: 21.6979375, lng: 39.1426875, name: 'kudu-317', متميز: false },
+ { lat: 21.7744793, lng: 39.1708643, name: 'kudu-318', متميز: false },
+ { lat: 21.4627816, lng: 39.2433562, name: 'kudu-319', متميز: false },
+ { lat: 21.508004, lng: 39.2233449999999, name: 'kudu-320', متميز: false },
+ { lat: 21.5060671, lng: 39.2180625999999, name: 'kudu-321', متميز: false },
+ { lat: 21.4554048999999, lng: 39.4012209, name: 'kudu-322', متميز: false },
+ { lat: 21.497284, lng: 39.2720775999999, name: 'kudu-323', متميز: false },
+ { lat: 21.423859, lng: 39.7828359999999, name: 'kudu-324', متميز: false },
+ { lat: 21.469825, lng: 39.7973695999999, name: 'kudu-325', متميز: false },
+ { lat: 21.2236367999999, lng: 40.3894071, name: 'kudu-326', متميز: false },
+ { lat: 21.3525036, lng: 40.4292036, name: 'kudu-327', متميز: false },
+ { lat: 21.2871876, lng: 40.4189049999999, name: 'kudu-328', متميز: false },
+ { lat: 21.2768116, lng: 40.4462380999999, name: 'kudu-329', متميز: false },
+ { lat: 21.4286457, lng: 40.4993864, name: 'kudu-330', متميز: false },
+ { lat: 17.5284553, lng: 44.2011275, name: 'kudu-331', متميز: false },
+ { lat: 16.8915799999999, lng: 42.5580329999999, name: 'kudu-332', متميز: false },
+ { lat: 18.212729, lng: 42.6558489999999, name: 'kudu-333', متميز: false },
+ { lat: 18.2316878, lng: 42.4794383, name: 'kudu-334', متميز: false },
+ { lat: 18.2764539999999, lng: 42.721902, name: 'kudu-335', متميز: false },
+ { lat: 18.203439, lng: 42.5170716, name: 'kudu-336', متميز: false },
+ { lat: 18.3364753999999, lng: 42.7674054, name: 'kudu-337', متميز: false },
+ { lat: 18.1850071, lng: 42.8258192, name: 'kudu-338', متميز: false },
+ { lat: 18.2343646, lng: 42.6579026, name: 'kudu-339', متميز: false },
+ { lat: 17.549221, lng: 44.2505649999999, name: 'kudu-340', متميز: false },
+ { lat: 19.0951169, lng: 42.1301923, name: 'kudu-341', متميز: false },
+ { lat: 19.133359, lng: 41.072837, name: 'kudu-342', متميز: false },
+ { lat: 19.1141304999999, lng: 41.9223891, name: 'kudu-343', متميز: false },
+ { lat: 19.1242448, lng: 41.9204062999999, name: 'kudu-344', متميز: false },
+ { lat: 18.2177823, lng: 42.5280051999999, name: 'kudu-345', متميز: false },
+ { lat: 22.30294, lng: 46.7307214, name: 'kudu-346', متميز: false },
+ { lat: 24.4954009999999, lng: 39.708528, name: 'kudu-347', متميز: false },
+ { lat: 24.4410247999999, lng: 39.6647627, name: 'kudu-348', متميز: false },
+ { lat: 24.4558638, lng: 39.6420769, name: 'kudu-349', متميز: false },
+ { lat: 24.4879908, lng: 39.6485576, name: 'kudu-350', متميز: false },
+ { lat: 24.4003431, lng: 39.7004419999999, name: 'kudu-351', متميز: false },
+ { lat: 24.495305, lng: 39.595852, name: 'kudu-352', متميز: false },
+ { lat: 24.8709272999999, lng: 40.4959749, name: 'kudu-353', متميز: false },
+ { lat: 26.6169185999999, lng: 37.9194081, name: 'kudu-354', متميز: false },
+ { lat: 26.4193155999999, lng: 43.9317851, name: 'kudu-355', متميز: false },
+ { lat: 26.3301409999999, lng: 44.011722, name: 'kudu-356', متميز: false },
+ { lat: 26.366571, lng: 43.9652059999999, name: 'kudu-357', متميز: false },
+ { lat: 26.1065193, lng: 43.9836266999999, name: 'kudu-358', متميز: false },
+ { lat: 26.234861, lng: 50.2135309999999, name: 'kudu-359', متميز: false },
+ { lat: 26.289935, lng: 50.181244, name: 'kudu-360', متميز: false },
+ { lat: 26.1687494, lng: 49.9245398, name: 'kudu-361', متميز: false },
+ { lat: 26.337559, lng: 49.957443, name: 'kudu-362', متميز: false },
+ { lat: 25.4442095999999, lng: 49.5938971, name: 'kudu-363', متميز: false },
+ { lat: 25.3971046, lng: 49.5600805, name: 'kudu-364', متميز: false },
+ { lat: 25.4610827, lng: 49.5595097, name: 'kudu-365', متميز: false },
+ { lat: 25.3998685999999, lng: 49.5779628999999, name: 'kudu-366', متميز: false },
+ { lat: 25.4403608, lng: 49.5709498999999, name: 'kudu-367', متميز: false },
+ { lat: 25.3084602, lng: 49.5560143, name: 'kudu-368', متميز: false },
+ { lat: 25.3686911, lng: 49.7232002999999, name: 'kudu-369', متميز: false },
+ { lat: 25.3303829999999, lng: 49.550165, name: 'kudu-370', متميز: false },
+ { lat: 26.6576411, lng: 49.9505894, name: 'kudu-371', متميز: false },
+ { lat: 26.3909332, lng: 50.1646001999999, name: 'kudu-372', متميز: false },
+
+
 ];
 
 
@@ -1711,6 +2183,31 @@ const AREAS_GEOJSON = {
               .addTo(branchMarkers);
     }
 
+    // مساعد: قراءة نوع الموقع (مول/بلازا) من خصائص متعددة ودعم العربية/الإنجليزية
+    function getPlaceType(b){
+      const raw = (b && (b.mallOrPlaza ?? b['مول او بلازا'] ?? b.placeType ?? '')).toString().trim().toLowerCase();
+      if (!raw) return '';
+      if (raw.includes('مول') || raw === 'mall') return 'mall';
+      if (raw.includes('بلازا') || raw === 'plaza') return 'plaza';
+      return '';
+    }
+
+    // اختيار فروع كازباستا حسب النوع (مول/بلازا)
+    function selectKazByPlace(target){
+      state.selectedBranches.clear();
+      BRANCHES.forEach((b,i) => { if (getPlaceType(b) === target) state.selectedBranches.add(i); });
+      // مزامنة صناديق الاختيار
+      if (branchChecklist) {
+        branchChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+          const idx = Number(cb.dataset.idx);
+          const b = BRANCHES[idx];
+          cb.checked = (getPlaceType(b) === target);
+        });
+      }
+      renderSelectedBranches();
+      const bb = fitBoundsOf(branchMarkers); if (bb) map.fitBounds(bb, { padding:[20,20] });
+    }
+
     async function drawIsochrone(b, dist){
       if (!MAPBOX_TOKEN || !chkIsochrones.checked) return;
       try{
@@ -1726,7 +2223,7 @@ const AREAS_GEOJSON = {
     function renderSelectedBranches(){
       clearBranches();
       clearIsochrones();
-      const dist = Number(distanceInput.value || 6000);
+      const dist = Number(distanceInput.value || 5000);
       [...state.selectedBranches].forEach(idx => {
         const b = BRANCHES[idx]; if(!b) return;
         addBranchMarker(b);
@@ -1814,8 +2311,24 @@ const AREAS_GEOJSON = {
     });
 
     // عناصر إضافية
-    btnRefreshIso.addEventListener('click', renderSelectedBranches);
-    chkIsochrones.addEventListener('change', renderSelectedBranches);
+    btnRefreshIso.addEventListener('click', () => {
+      renderSelectedBranches();
+      if (suggestedIsoVisible) {
+        const dist = Number(distanceInput.value || 5000);
+        drawSuggestedIsochrones(dist);
+      }
+    });
+    chkIsochrones.addEventListener('change', () => {
+      renderSelectedBranches();
+      if (suggestedIsoVisible) {
+        if (chkIsochrones.checked) {
+          const dist = Number(distanceInput.value || 5000);
+          drawSuggestedIsochrones(dist);
+        } else {
+          suggestedIsoLayer.clearLayers();
+        }
+      }
+    });
     chkLabels.addEventListener('change', renderSelectedAreas);
 
     btnFitSelected.addEventListener('click', fitSelection);
@@ -1824,6 +2337,10 @@ const AREAS_GEOJSON = {
       state.areasVisible = !state.areasVisible;
       state.areasVisible ? renderSelectedAreas() : clearAreas();
     });
+
+    // ربط أزرار كازباستا (مول/بلازا)
+    if (btnKazMall)  btnKazMall.addEventListener('click',  () => selectKazByPlace('mall'));
+    if (btnKazPlaza) btnKazPlaza.addEventListener('click', () => selectKazByPlace('plaza'));
 
     /********************
      * (8) تشغيل أولي
@@ -1887,6 +2404,7 @@ btnToggleMcdRings.onclick = () => {
 
 // 1. منطق زر تفعيل/إلغاء وضع الإضافة
 const btnAddSite = document.getElementById('btnAddSite');
+const btnClearSuggested = document.getElementById('btnClearSuggested');
 
 btnAddSite.onclick = () => {
   isAddModeActive = !isAddModeActive; // عكس الحالة
@@ -1898,6 +2416,23 @@ btnAddSite.onclick = () => {
     btnAddSite.textContent = '➕ تفعيل وضع إضافة موقع';
     btnAddSite.style.backgroundColor = '#27ae60'; // اللون الأخضر الافتراضي
     map.getContainer().style.cursor = ''; // إعادة المؤشر للشكل الطبيعي
+  }
+};
+
+// مسح جميع المواقع المقترحة وإزالة التخزين المحلي
+btnClearSuggested.onclick = () => {
+  if (!confirm('هل أنت متأكد من مسح كل المواقع المقترحة؟')) return;
+  SUGGESTED_SITES = [];
+  suggestedLayer.clearLayers();
+  suggestedIsoLayer.clearLayers();
+  localStorage.removeItem('suggestedSites');
+  if (suggestedVisible) {
+    btnToggleSuggested.click();
+  } else {
+    buildSuggestedLayers();
+  }
+  if (suggestedIsoVisible) {
+    btnToggleSuggestedIso.click();
   }
 };
 
@@ -1963,23 +2498,30 @@ btnDownloadSuggested.onclick = () => {
     return;
   }
 
-  // 3. إنشاء "ملف مؤقت" في ذاكرة المتصفح (Blob)
-  const blob = new Blob([savedData], { type: 'application/json' });
+  // 3. تحويل البيانات من JSON إلى مصفوفة كائنات
+  const jsonData = JSON.parse(savedData);
 
-  // 4. إنشاء رابط مؤقت لهذا الملف
-  const url = URL.createObjectURL(blob);
+  // 4. إنشاء ملف Excel باستخدام مكتبة SheetJS
+  const worksheet = XLSX.utils.json_to_sheet(jsonData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'SuggestedSites');
 
-  // 5. إنشاء عنصر رابط مخفي لتشغيل عملية التنزيل
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'suggested_sites.json'; // هذا هو اسم الملف الذي سيتم حفظه
-  document.body.appendChild(a); // يجب إضافة الرابط للصفحة ليتمكن من العمل
-  a.click(); // محاكاة نقرة المستخدم على الرابط
-
-  // 6. تنظيف الروابط المؤقتة من الصفحة والذاكرة
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // 5. تنزيل الملف بصيغة .xlsx
+  XLSX.writeFile(workbook, 'suggested_sites.xlsx');
 };
+
+// Override getPlaceType: دعم المفتاح `mall` كسلسلة "Mall"/"Plaza" أو قيمة منطقية
+function getPlaceType(b){
+  try{
+    const val = b && (b.mallOrPlaza ?? b['مول او بلازا'] ?? b.placeType ?? b.mall ?? '');
+    if (typeof val === 'boolean') return val ? 'mall' : '';
+    const raw = String(val).trim().toLowerCase();
+    if (!raw) return '';
+    if (raw === 'mall' || raw.includes('مول')) return 'mall';
+    if (raw === 'plaza' || raw.includes('بلازا')) return 'plaza';
+    return '';
+  }catch(e){ return ''; }
+}
 
   </script>
 </body>
