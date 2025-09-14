@@ -101,6 +101,14 @@
   font-size:16px; 
 } /* بنفسجي */
 
+  /* New sites: planned and approved marker styles */
+  .brand-icon.planned  { border-color:#2e7d32; color:#2e7d32; }
+  .brand-icon.approved { border-color:#2e7d32; color:#2e7d32; }
+
+  /* New sites: marker colors */
+  .brand-icon.planned  { border-color:#2e7d32; color:#2e7d32; }
+  .brand-icon.approved { border-color:#2e7d32; color:#2e7d32; }
+
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
@@ -120,6 +128,10 @@
 <button id="btnKfcFeatured">كنتاكي المتميزة</button>
 <button id="btnKuduFeatured">كودو المتميزة</button>
 
+<button id="btnTogglePlannedNew">إظهار المواقع الجديدة – مخططة</button>
+<button id="btnToggleApprovedNew">إظهار المواقع الجديدة – معتمدة</button>
+
+<button id="btnTogglePlannedIso">إظهار مضلعات الوصول للمواقع المخططة</button>
 <div id="map"></div>
 <!-- Show button appears when panel is hidden -->
 <button id="btnShowPanel" class="panel-show-btn" title="إظهار لوحة التحكم">إظهار لوحة التحكم</button>
@@ -363,6 +375,64 @@ let suggestedVisible = false;
 const suggestedIsoLayer = L.layerGroup();
 let suggestedIsoVisible = false;
 
+// Planned sites isochrones
+const plannedIsoLayer = L.layerGroup();
+let plannedIsoVisible = false;
+
+// New sites (placeholders to be filled later)
+const plannedNewLayer  = L.layerGroup();
+const approvedNewLayer = L.layerGroup();
+let plannedNewVisible  = false;
+let approvedNewVisible = false;
+
+// Arrays to populate later: [{lat, lng, name}]
+let PLANNED_NEW_SITES  = [{ lat: 24.6469781571168, lng: 46.4982604980469, name: 'موقع المهدية' },
+{ lat: 24.79861730649, lng: 46.8567538261414, name: 'موقع 2' },
+{ lat: 24.6918849319191, lng: 46.7627906799316, name: 'موقع 3' },
+{ lat: 24.7330336410652, lng: 46.7842483520508, name: 'موقع الروضة' },
+{ lat: 24.7455061661515, lng: 46.8245029449463, name: 'موقع النسيم بديل العثيم' },
+{ lat: 24.7672716220682, lng: 46.7559027671814, name: 'موقع الحمرا' },
+{ lat: 24.8390880777639, lng: 46.7483711242676, name: 'موقع مونسية' },
+{ lat: 24.8802074725405, lng: 46.648120880127, name: 'موقع النرجس' },
+{ lat: 24.8774043118582, lng: 46.6144752502441, name: 'موقع 4' },
+{ lat: 24.8194580938708, lng: 46.5957641601563, name: 'موقع القيروان' },
+{ lat: 24.6696773056581, lng: 46.7269992828369, name: 'موقع حي الملز' },
+{ lat: 24.461838188935, lng: 46.2999057769775, name: 'موقع المزاحمية' },
+{ lat: 24.7780652498774, lng: 46.7073440551758, name: 'موقع الازدهار' },
+{ lat: 24.7623226053602, lng: 46.6966474056244, name: 'موقع التعاون' },
+{ lat: 24.7993088093705, lng: 46.7402172088623, name: 'موقع حي الشهداء' },
+{ lat: 24.7879033889719, lng: 46.6619825363159, name: 'موقع حي الربيع' },
+{ lat: 24.84578648696, lng: 46.8252325057983, name: 'موقع حي الرمال' },
+{ lat: 24.5472402896291, lng: 46.6958427429199, name: 'موقع الشفا' },
+{ lat: 24.5323469373484, lng: 46.6551375389099, name: 'موقع ديراب 2' },
+{ lat: 24.5715382280671, lng: 46.6142821311951, name: 'موقع 5' },
+{ lat: 24.5964557980836, lng: 46.6825175285339, name: 'موقع السويدي 1' },
+];
+let APPROVED_NEW_SITES = [];
+
+function buildPlannedNew(){
+  plannedNewLayer.clearLayers();
+  const icon = L.divIcon({ html: '<div>P</div>', className: 'brand-icon planned', iconSize:[24,24], iconAnchor:[12,12] });
+  (PLANNED_NEW_SITES || []).forEach(p => {
+    if (p && typeof p.lat === 'number' && typeof p.lng === 'number') {
+      L.marker([p.lat, p.lng], { icon }).bindTooltip(p.name || 'موقع مخطط', { direction:'top' }).addTo(plannedNewLayer);
+    }
+  });
+  if (plannedIsoVisible) {
+    const dist = Number(distanceInput.value || 5000);
+    drawPlannedIsochrones(dist);
+  }
+}
+function buildApprovedNew(){
+  approvedNewLayer.clearLayers();
+  const icon = L.divIcon({ html: '<div>A</div>', className: 'brand-icon approved', iconSize:[24,24], iconAnchor:[12,12] });
+  (APPROVED_NEW_SITES || []).forEach(p => {
+    if (p && typeof p.lat === 'number' && typeof p.lng === 'number') {
+      L.marker([p.lat, p.lng], { icon }).bindTooltip(p.name || 'موقع معتمد', { direction:'top' }).addTo(approvedNewLayer);
+    }
+  });
+}
+
 // مصفوفة لتخزين بيانات المواقع المقترحة
 // استخدم let بدلاً من const لأننا سنضيف إليها بيانات جديدة
 // ✅ تحميل المواقع المقترحة من التخزين المحلي أو إنشاء مصفوفة فارغة
@@ -485,6 +555,24 @@ async function drawSuggestedIsochrones(dist) {
   });
   await Promise.all(tasks);
 }
+
+async function drawPlannedIsochrones(dist) {
+  plannedIsoLayer.clearLayers();
+  if (!MAPBOX_TOKEN || !chkIsochrones.checked) return;
+  const tasks = (PLANNED_NEW_SITES || []).map(async (p) => {
+    try {
+      const url = `https://api.mapbox.com/isochrone/v1/mapbox/${ISO_PROFILE}/${p.lng},${p.lat}?contours_meters=${dist}&polygons=true&access_token=${MAPBOX_TOKEN}`;
+      const res = await fetch(url);
+      if (!res.ok) { console.error('Isochrone error (planned)', await res.text()); return; }
+      const data = await res.json();
+      const layer = L.geoJSON(data, { style: { color: '#1565c0', weight: 2, fillOpacity: 0.20, fillColor: '#1565c0' } }).bindTooltip(p.name || 'موقع مخطط');
+      plannedIsoLayer.addLayer(layer);
+    } catch (err) {
+      console.error('fetch planned isochrone failed', err);
+    }
+  });
+  await Promise.all(tasks);
+}
 const btnToggleKFC  = document.getElementById('btnToggleKFC');
 const btnToggleKUDU = document.getElementById('btnToggleKUDU');
 
@@ -551,6 +639,39 @@ function buildKuduFeatured(){
 
 const btnToggleSuggested = document.getElementById('btnToggleSuggested');
 const btnToggleSuggestedIso = document.getElementById('btnToggleSuggestedIso');
+const btnTogglePlannedNew  = document.getElementById('btnTogglePlannedNew');
+const btnToggleApprovedNew = document.getElementById('btnToggleApprovedNew');
+const btnTogglePlannedIso  = document.getElementById('btnTogglePlannedIso');
+
+// Toggle: Planned new sites
+if (btnTogglePlannedNew){
+  btnTogglePlannedNew.onclick = () => {
+    plannedNewVisible = !plannedNewVisible;
+    if (plannedNewVisible) {
+      buildPlannedNew();
+      plannedNewLayer.addTo(map);
+      btnTogglePlannedNew.textContent = 'إخفاء المواقع الجديدة – مخططة';
+    } else {
+      map.removeLayer(plannedNewLayer);
+      btnTogglePlannedNew.textContent = 'إظهار المواقع الجديدة – مخططة';
+    }
+  };
+}
+
+// Toggle: Approved new sites
+if (btnToggleApprovedNew){
+  btnToggleApprovedNew.onclick = () => {
+    approvedNewVisible = !approvedNewVisible;
+    if (approvedNewVisible) {
+      buildApprovedNew();
+      approvedNewLayer.addTo(map);
+      btnToggleApprovedNew.textContent = 'إخفاء المواقع الجديدة – معتمدة';
+    } else {
+      map.removeLayer(approvedNewLayer);
+      btnToggleApprovedNew.textContent = 'إظهار المواقع الجديدة – معتمدة';
+    }
+  };
+}
 
 btnToggleSuggested.onclick = () => {
   suggestedVisible = !suggestedVisible;
@@ -575,6 +696,22 @@ btnToggleSuggestedIso.onclick = async () => {
     btnToggleSuggestedIso.textContent = 'عرض خريطة توصيل المواقع المقترحة';
   }
 };
+
+// Toggle planned sites isochrones
+if (btnTogglePlannedIso){
+  btnTogglePlannedIso.onclick = async () => {
+    plannedIsoVisible = !plannedIsoVisible;
+    if (plannedIsoVisible) {
+      const dist = Number(distanceInput.value || 5000);
+      await drawPlannedIsochrones(dist);
+      plannedIsoLayer.addTo(map);
+      btnTogglePlannedIso.textContent = 'إخفاء مضلعات الوصول للمواقع المخططة';
+    } else {
+      map.removeLayer(plannedIsoLayer);
+      btnTogglePlannedIso.textContent = 'إظهار مضلعات الوصول للمواقع المخططة';
+    }
+  };
+}
 
 // أزرار تفعيل عرض الفروع المتميزة KFC/KUDU
 if (btnKfcFeatured) {
