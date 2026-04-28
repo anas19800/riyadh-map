@@ -2378,6 +2378,17 @@ const AREAS_GEOJSON = {
       }
     }
 
+    function getIsoStyleByPlaceType(b){
+      const type = getPlaceType(b);
+      if (type === 'mall') {
+        return { color:'#1565c0', fillColor:'#42a5f5', fillOpacity:0.22 };
+      }
+      if (type === 'plaza') {
+        return { color:'#ef6c00', fillColor:'#ffb74d', fillOpacity:0.24 };
+      }
+      return { color:'#1faa00', fillColor:'#1faa00', fillOpacity:0.25 };
+    }
+
     async function drawIsochrone(b, dist){
       if (!MAPBOX_TOKEN || !chkIsochrones.checked) return;
       try{
@@ -2385,7 +2396,8 @@ const AREAS_GEOJSON = {
         const res = await fetch(url);
         if(!res.ok){ console.error('Isochrone error', await res.text()); return; }
         const data = await res.json();
-        const layer = L.geoJSON(data, { style:{ color:'#1faa00', weight:2, fillOpacity:0.25, fillColor:'#1faa00' } }).bindTooltip(b.name);
+        const style = getIsoStyleByPlaceType(b);
+        const layer = L.geoJSON(data, { style:{ color:style.color, weight:2, fillOpacity:style.fillOpacity, fillColor:style.fillColor } }).bindTooltip(b.name);
         isochroneLayers.addLayer(layer);
       }catch(err){ console.error('fetch isochrone failed', err); }
     }
