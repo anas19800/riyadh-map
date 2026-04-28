@@ -2664,7 +2664,7 @@ btnDownloadSuggested.onclick = () => {
 function getPlaceType(b){
   try{
     const val = b && (b.mallOrPlaza ?? b['مول او بلازا'] ?? b.placeType ?? b.mall ?? '');
-    if (typeof val === 'boolean') return val ? 'mall' : '';
+    if (typeof val === 'boolean') return val ? 'mall' : 'plaza';
     const raw = String(val).trim().toLowerCase();
     if (!raw) return '';
     if (raw === 'mall' || raw.includes('مول')) return 'mall';
