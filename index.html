@@ -11,6 +11,32 @@
     :root { --card-shadow: 0 2px 8px rgba(0,0,0,.15); --radius: 12px; }
     html, body, #map { height: 100%; margin: 0; padding: 0; font-family: Tahoma, Arial, sans-serif; }
     #map { height: 100vh; width: 100%; }
+    body { overflow: hidden; }
+
+    /* Top toolbar stays fixed so map size never changes when button text changes */
+    #topControls {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      z-index: 1200;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      pointer-events: none;
+    }
+    #topControls > button {
+      width: auto;
+      flex: 0 0 auto;
+      pointer-events: auto;
+      padding: 4px 8px;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 13px;
+      line-height: 1.2;
+      cursor: pointer;
+    }
 
     .panel {
       max-height: 85vh;           /* keep the panel within the viewport height */
@@ -115,23 +141,25 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-<button id="btnToggleMcd">عرض ماكدونالدز</button>
-<button id="btnToggleMcdRings">عرض دوائر 5 كم</button>
-<button id="btnToggleKFC">عرض KFC</button>
-<button id="btnToggleKUDU">عرض KUDU</button>
-<button id="btnToggleSuggested">عرض المواقع المقترحة</button>
-<button id="btnToggleSuggestedIso">عرض خريطة توصيل المواقع المقترحة</button>
+<div id="topControls">
+  <button id="btnToggleMcd">عرض ماكدونالدز</button>
+  <button id="btnToggleMcdRings">عرض دوائر 5 كم</button>
+  <button id="btnToggleKFC">عرض KFC</button>
+  <button id="btnToggleKUDU">عرض KUDU</button>
+  <button id="btnToggleSuggested">عرض المواقع المقترحة</button>
+  <button id="btnToggleSuggestedIso">عرض خريطة توصيل المواقع المقترحة</button>
 
-<!-- أزرار الفلاتر السريعة بالأعلى -->
-<button id="btnKazMall">كازباستا داخل المول</button>
-<button id="btnKazPlaza">كازباستا في البلازا</button>
-<button id="btnKfcFeatured">كنتاكي المتميزة</button>
-<button id="btnKuduFeatured">كودو المتميزة</button>
+  <!-- أزرار الفلاتر السريعة بالأعلى -->
+  <button id="btnKazMall">كازباستا داخل المول</button>
+  <button id="btnKazPlaza">كازباستا في البلازا</button>
+  <button id="btnKfcFeatured">كنتاكي المتميزة</button>
+  <button id="btnKuduFeatured">كودو المتميزة</button>
 
-<button id="btnTogglePlannedNew">إظهار المواقع الجديدة – مخططة</button>
-<button id="btnToggleApprovedNew">إظهار المواقع الجديدة – معتمدة</button>
+  <button id="btnTogglePlannedNew">إظهار المواقع الجديدة – مخططة</button>
+  <button id="btnToggleApprovedNew">إظهار المواقع الجديدة – معتمدة</button>
 
-<button id="btnTogglePlannedIso">إظهار مضلعات الوصول للمواقع المخططة</button>
+  <button id="btnTogglePlannedIso">إظهار مضلعات الوصول للمواقع المخططة</button>
+</div>
 <div id="map"></div>
 <!-- Show button appears when panel is hidden -->
 <button id="btnShowPanel" class="panel-show-btn" title="إظهار لوحة التحكم">إظهار لوحة التحكم</button>
@@ -163,15 +191,15 @@
     </div>
 
     <!-- فلاتر سريعة للفروع والعلامات -->
-    <div class="group">
+    <div class="group quick-filters-group">
       <label>فلاتر سريعة</label>
       <div class="row">
-        <button id="btnKazMall">كازباستا داخل المول</button>
-        <button id="btnKazPlaza">كازباستا في البلازا</button>
+        <button id="btnKazMallPanel">كازباستا داخل المول</button>
+        <button id="btnKazPlazaPanel">كازباستا في البلازا</button>
       </div>
       <div class="row" style="margin-top:6px">
-        <button id="btnKfcFeatured">كنتاكي المتميزة</button>
-        <button id="btnKuduFeatured">كودو المتميزة</button>
+        <button id="btnKfcFeaturedPanel">كنتاكي المتميزة</button>
+        <button id="btnKuduFeaturedPanel">كودو المتميزة</button>
       </div>
     </div>
 
@@ -289,12 +317,11 @@
   const panel = document.getElementById('control-panel');
   if (!panel) return;
   try{
-    const anyBtn = panel.querySelector('#btnKazMall, #btnKazPlaza, #btnKfcFeatured, #btnKuduFeatured');
-    const grp = anyBtn ? anyBtn.closest('.group') : null;
+    const grp = panel.querySelector('.quick-filters-group');
     if (grp) {
       grp.remove();
     } else {
-      panel.querySelectorAll('#btnKazMall, #btnKazPlaza, #btnKfcFeatured, #btnKuduFeatured').forEach(el => el.remove());
+      panel.querySelectorAll('#btnKazMallPanel, #btnKazPlazaPanel, #btnKfcFeaturedPanel, #btnKuduFeaturedPanel').forEach(el => el.remove());
     }
   }catch(e){}
 })();
@@ -386,33 +413,17 @@ let plannedNewVisible  = false;
 let approvedNewVisible = false;
 
 // Arrays to populate later: [{lat, lng, name}]
-let PLANNED_NEW_SITES  = [{ lat: 24.6469781571168, lng: 46.4982604980469, name: 'موقع المهدية' },
-{ lat: 24.79861730649, lng: 46.8567538261414, name: 'موقع 2' },
-{ lat: 24.6918849319191, lng: 46.7627906799316, name: 'موقع 3' },
-{ lat: 24.7330336410652, lng: 46.7842483520508, name: 'موقع الروضة' },
-{ lat: 24.7455061661515, lng: 46.8245029449463, name: 'موقع النسيم بديل العثيم' },
-{ lat: 24.7672716220682, lng: 46.7559027671814, name: 'موقع الحمرا' },
-{ lat: 24.8390880777639, lng: 46.7483711242676, name: 'موقع مونسية' },
-{ lat: 24.8802074725405, lng: 46.648120880127, name: 'موقع النرجس' },
-{ lat: 24.8774043118582, lng: 46.6144752502441, name: 'موقع 4' },
-{ lat: 24.8194580938708, lng: 46.5957641601563, name: 'موقع القيروان' },
-{ lat: 24.6696773056581, lng: 46.7269992828369, name: 'موقع حي الملز' },
-{ lat: 24.461838188935, lng: 46.2999057769775, name: 'موقع المزاحمية' },
-{ lat: 24.7780652498774, lng: 46.7073440551758, name: 'موقع الازدهار' },
-{ lat: 24.7623226053602, lng: 46.6966474056244, name: 'موقع التعاون' },
-{ lat: 24.7993088093705, lng: 46.7402172088623, name: 'موقع حي الشهداء' },
-{ lat: 24.7879033889719, lng: 46.6619825363159, name: 'موقع حي الربيع' },
-{ lat: 24.84578648696, lng: 46.8252325057983, name: 'موقع حي الرمال' },
-{ lat: 24.5472402896291, lng: 46.6958427429199, name: 'موقع الشفا' },
-{ lat: 24.5323469373484, lng: 46.6551375389099, name: 'موقع ديراب 2' },
-{ lat: 24.5715382280671, lng: 46.6142821311951, name: 'موقع 5' },
-{ lat: 24.5964557980836, lng: 46.6825175285339, name: 'موقع السويدي 1' },
-{ lat: 26.6574246105305, lng: 49.9483200292224, name: 'موقع صفوى' },
-{ lat: 26.1750140207812, lng: 50.1621789011117, name: 'Q Plaza Alkhobar' },
-{ lat: 26.3417401741759, lng: 49.9666648102386, name: 'موقع الفرسان' },
-{ lat: 27.1361860241747, lng: 49.5651972863479, name: 'Fanateer - Jubail Industry' },
-{ lat: 18.2378144536607, lng: 42.5805989980074, name: 'Al Rashid Mall ABHA' },
-{ lat: 18.279527589688, lng: 42.5934652143222, name: 'Almahalah - Abha' }];
+let PLANNED_NEW_SITES  = [{ lat: 24.5618309293725, lng: 46.6428403800096, name: 'Expansion plan - 2026 Rose Yard' },
+{ lat: 24.7383156605418, lng: 46.782206403522, name: 'Andalus Square' },
+{ lat: 24.8065240249063, lng: 46.6833336257784, name: 'Nada Plaza' },
+{ lat: 24.845429958485, lng: 46.6539584954248, name: 'Narjis Plaza' },
+{ lat: 24.5615155698593, lng: 46.6967006548362, name: 'Shifa Plaza' },
+{ lat: 21.7615686245544, lng: 39.1489758829792, name: 'Abhur S' },
+{ lat: 21.7643424984318, lng: 39.1130612823079, name: 'Abhur N' },
+{ lat: 21.614170693903, lng: 39.1882346957652, name: 'Marwa Center' },
+{ lat: 18.2744457249707, lng: 42.715141155649, name: 'Reem Park' },
+{ lat: 18.3344863052784, lng: 42.7653336524963, name: 'Al Mosaa' },
+{ lat: 18.2720837143545, lng: 42.6151514053345, name: 'Mahala ' }];
 let APPROVED_NEW_SITES = [];
 
 function buildPlannedNew(){
@@ -2268,9 +2279,17 @@ const AREAS_GEOJSON = {
     /********************
      * (5) قوائم التحديد (Checkboxes)
      ********************/
-    function populateBranchesDropdown(){
+    function populateBranchesDropdown(indices = null){
       branchSelect.innerHTML = '<option value="">— اختر فرعًا —</option>';
-      BRANCHES.forEach((b,i)=>{ const o=document.createElement('option'); o.value=String(i); o.textContent=b.name; branchSelect.appendChild(o); });
+      const source = Array.isArray(indices) ? indices : BRANCHES.map((_, i) => i);
+      source.forEach((i) => {
+        const b = BRANCHES[i];
+        if (!b) return;
+        const o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = b.name;
+        branchSelect.appendChild(o);
+      });
     }
 
     function populateBranchChecklist(){
@@ -2351,11 +2370,36 @@ const AREAS_GEOJSON = {
         branchChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb => {
           const idx = Number(cb.dataset.idx);
           const b = BRANCHES[idx];
-          cb.checked = (getPlaceType(b) === target);
+          const matched = (getPlaceType(b) === target);
+          cb.checked = matched;
+          const label = cb.closest('label');
+          if (label) label.style.display = matched ? '' : 'none';
         });
       }
+      const selectedIdx = [...state.selectedBranches];
+      populateBranchesDropdown(selectedIdx);
+      branchSelect.value = '';
       renderSelectedBranches();
-      const bb = fitBoundsOf(branchMarkers); if (bb) map.fitBounds(bb, { padding:[20,20] });
+      // لا تغيّر موقع/تكبير الخريطة تلقائياً عند الضغط على أزرار (المول/البلازا)
+      // حتى لا يبدو للمستخدم أن الصفحة "انسحبت للأعلى".
+    }
+
+    function resetBranchBrowsingView(){
+      populateBranchesDropdown();
+      if (branchChecklist) {
+        branchChecklist.querySelectorAll('label').forEach(lbl => lbl.style.display = '');
+      }
+    }
+
+    function getIsoStyleByPlaceType(b){
+      const type = getPlaceType(b);
+      if (type === 'mall') {
+        return { color:'#1565c0', fillColor:'#42a5f5', fillOpacity:0.22 };
+      }
+      if (type === 'plaza') {
+        return { color:'#ef6c00', fillColor:'#ffb74d', fillOpacity:0.24 };
+      }
+      return { color:'#1faa00', fillColor:'#1faa00', fillOpacity:0.25 };
     }
 
     async function drawIsochrone(b, dist){
@@ -2365,7 +2409,8 @@ const AREAS_GEOJSON = {
         const res = await fetch(url);
         if(!res.ok){ console.error('Isochrone error', await res.text()); return; }
         const data = await res.json();
-        const layer = L.geoJSON(data, { style:{ color:'#1faa00', weight:2, fillOpacity:0.25, fillColor:'#1faa00' } }).bindTooltip(b.name);
+        const style = getIsoStyleByPlaceType(b);
+        const layer = L.geoJSON(data, { style:{ color:style.color, weight:2, fillOpacity:style.fillOpacity, fillColor:style.fillColor } }).bindTooltip(b.name);
         isochroneLayers.addLayer(layer);
       }catch(err){ console.error('fetch isochrone failed', err); }
     }
@@ -2417,6 +2462,7 @@ const AREAS_GEOJSON = {
     btnShowAll.addEventListener('click', () => {
       state.selectedBranches = new Set(BRANCHES.map((_,i)=>i));
       branchChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=true);
+      resetBranchBrowsingView();
       renderSelectedBranches();
       const bb = fitBoundsOf(branchMarkers); if (bb) map.fitBounds(bb, {padding:[20,20]});
     });
@@ -2433,11 +2479,13 @@ const AREAS_GEOJSON = {
     btnBranchesAll.addEventListener('click', ()=>{
       state.selectedBranches = new Set(BRANCHES.map((_,i)=>i));
       branchChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=true);
+      resetBranchBrowsingView();
       renderSelectedBranches();
     });
     btnBranchesNone.addEventListener('click', ()=>{
       state.selectedBranches.clear();
       branchChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=false);
+      resetBranchBrowsingView();
       renderSelectedBranches();
     });
 
@@ -2664,11 +2712,14 @@ btnDownloadSuggested.onclick = () => {
 function getPlaceType(b){
   try{
     const val = b && (b.mallOrPlaza ?? b['مول او بلازا'] ?? b.placeType ?? b.mall ?? '');
-    if (typeof val === 'boolean') return val ? 'mall' : '';
+    if (typeof val === 'boolean') return val ? 'mall' : 'plaza';
     const raw = String(val).trim().toLowerCase();
     if (!raw) return '';
     if (raw === 'mall' || raw.includes('مول')) return 'mall';
     if (raw === 'plaza' || raw.includes('بلازا')) return 'plaza';
+    const name = String(b?.name || '').trim().toLowerCase();
+    if (name.includes('mall') || name.includes('مول')) return 'mall';
+    if (name.includes('plaza') || name.includes('بلازا')) return 'plaza';
     return '';
   }catch(e){ return ''; }
 }
