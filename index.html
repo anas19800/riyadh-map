@@ -11,6 +11,32 @@
     :root { --card-shadow: 0 2px 8px rgba(0,0,0,.15); --radius: 12px; }
     html, body, #map { height: 100%; margin: 0; padding: 0; font-family: Tahoma, Arial, sans-serif; }
     #map { height: 100vh; width: 100%; }
+    body { overflow: hidden; }
+
+    /* Top toolbar stays fixed so map size never changes when button text changes */
+    #topControls {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      z-index: 1200;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      pointer-events: none;
+    }
+    #topControls > button {
+      width: auto;
+      flex: 0 0 auto;
+      pointer-events: auto;
+      padding: 4px 8px;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 13px;
+      line-height: 1.2;
+      cursor: pointer;
+    }
 
     .panel {
       max-height: 85vh;           /* keep the panel within the viewport height */
@@ -115,23 +141,25 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-<button id="btnToggleMcd">عرض ماكدونالدز</button>
-<button id="btnToggleMcdRings">عرض دوائر 5 كم</button>
-<button id="btnToggleKFC">عرض KFC</button>
-<button id="btnToggleKUDU">عرض KUDU</button>
-<button id="btnToggleSuggested">عرض المواقع المقترحة</button>
-<button id="btnToggleSuggestedIso">عرض خريطة توصيل المواقع المقترحة</button>
+<div id="topControls">
+  <button id="btnToggleMcd">عرض ماكدونالدز</button>
+  <button id="btnToggleMcdRings">عرض دوائر 5 كم</button>
+  <button id="btnToggleKFC">عرض KFC</button>
+  <button id="btnToggleKUDU">عرض KUDU</button>
+  <button id="btnToggleSuggested">عرض المواقع المقترحة</button>
+  <button id="btnToggleSuggestedIso">عرض خريطة توصيل المواقع المقترحة</button>
 
-<!-- أزرار الفلاتر السريعة بالأعلى -->
-<button id="btnKazMall">كازباستا داخل المول</button>
-<button id="btnKazPlaza">كازباستا في البلازا</button>
-<button id="btnKfcFeatured">كنتاكي المتميزة</button>
-<button id="btnKuduFeatured">كودو المتميزة</button>
+  <!-- أزرار الفلاتر السريعة بالأعلى -->
+  <button id="btnKazMall">كازباستا داخل المول</button>
+  <button id="btnKazPlaza">كازباستا في البلازا</button>
+  <button id="btnKfcFeatured">كنتاكي المتميزة</button>
+  <button id="btnKuduFeatured">كودو المتميزة</button>
 
-<button id="btnTogglePlannedNew">إظهار المواقع الجديدة – مخططة</button>
-<button id="btnToggleApprovedNew">إظهار المواقع الجديدة – معتمدة</button>
+  <button id="btnTogglePlannedNew">إظهار المواقع الجديدة – مخططة</button>
+  <button id="btnToggleApprovedNew">إظهار المواقع الجديدة – معتمدة</button>
 
-<button id="btnTogglePlannedIso">إظهار مضلعات الوصول للمواقع المخططة</button>
+  <button id="btnTogglePlannedIso">إظهار مضلعات الوصول للمواقع المخططة</button>
+</div>
 <div id="map"></div>
 <!-- Show button appears when panel is hidden -->
 <button id="btnShowPanel" class="panel-show-btn" title="إظهار لوحة التحكم">إظهار لوحة التحكم</button>
