@@ -163,15 +163,15 @@
     </div>
 
     <!-- فلاتر سريعة للفروع والعلامات -->
-    <div class="group">
+    <div class="group quick-filters-group">
       <label>فلاتر سريعة</label>
       <div class="row">
-        <button id="btnKazMall">كازباستا داخل المول</button>
-        <button id="btnKazPlaza">كازباستا في البلازا</button>
+        <button id="btnKazMallPanel">كازباستا داخل المول</button>
+        <button id="btnKazPlazaPanel">كازباستا في البلازا</button>
       </div>
       <div class="row" style="margin-top:6px">
-        <button id="btnKfcFeatured">كنتاكي المتميزة</button>
-        <button id="btnKuduFeatured">كودو المتميزة</button>
+        <button id="btnKfcFeaturedPanel">كنتاكي المتميزة</button>
+        <button id="btnKuduFeaturedPanel">كودو المتميزة</button>
       </div>
     </div>
 
@@ -289,12 +289,11 @@
   const panel = document.getElementById('control-panel');
   if (!panel) return;
   try{
-    const anyBtn = panel.querySelector('#btnKazMall, #btnKazPlaza, #btnKfcFeatured, #btnKuduFeatured');
-    const grp = anyBtn ? anyBtn.closest('.group') : null;
+    const grp = panel.querySelector('.quick-filters-group');
     if (grp) {
       grp.remove();
     } else {
-      panel.querySelectorAll('#btnKazMall, #btnKazPlaza, #btnKfcFeatured, #btnKuduFeatured').forEach(el => el.remove());
+      panel.querySelectorAll('#btnKazMallPanel, #btnKazPlazaPanel, #btnKfcFeaturedPanel, #btnKuduFeaturedPanel').forEach(el => el.remove());
     }
   }catch(e){}
 })();
@@ -2669,6 +2668,9 @@ function getPlaceType(b){
     if (!raw) return '';
     if (raw === 'mall' || raw.includes('مول')) return 'mall';
     if (raw === 'plaza' || raw.includes('بلازا')) return 'plaza';
+    const name = String(b?.name || '').trim().toLowerCase();
+    if (name.includes('mall') || name.includes('مول')) return 'mall';
+    if (name.includes('plaza') || name.includes('بلازا')) return 'plaza';
     return '';
   }catch(e){ return ''; }
 }
