@@ -2267,9 +2267,17 @@ const AREAS_GEOJSON = {
     /********************
      * (5) قوائم التحديد (Checkboxes)
      ********************/
-    function populateBranchesDropdown(){
+    function populateBranchesDropdown(indices = null){
       branchSelect.innerHTML = '<option value="">— اختر فرعًا —</option>';
-      BRANCHES.forEach((b,i)=>{ const o=document.createElement('option'); o.value=String(i); o.textContent=b.name; branchSelect.appendChild(o); });
+      const source = Array.isArray(indices) ? indices : BRANCHES.map((_, i) => i);
+      source.forEach((i) => {
+        const b = BRANCHES[i];
+        if (!b) return;
+        const o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = b.name;
+        branchSelect.appendChild(o);
+      });
     }
 
     function populateBranchChecklist(){
@@ -2350,11 +2358,24 @@ const AREAS_GEOJSON = {
         branchChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb => {
           const idx = Number(cb.dataset.idx);
           const b = BRANCHES[idx];
-          cb.checked = (getPlaceType(b) === target);
+          const matched = (getPlaceType(b) === target);
+          cb.checked = matched;
+          const label = cb.closest('label');
+          if (label) label.style.display = matched ? '' : 'none';
         });
       }
+      const selectedIdx = [...state.selectedBranches];
+      populateBranchesDropdown(selectedIdx);
+      branchSelect.value = '';
       renderSelectedBranches();
       const bb = fitBoundsOf(branchMarkers); if (bb) map.fitBounds(bb, { padding:[20,20] });
+    }
+
+    function resetBranchBrowsingView(){
+      populateBranchesDropdown();
+      if (branchChecklist) {
+        branchChecklist.querySelectorAll('label').forEach(lbl => lbl.style.display = '');
+      }
     }
 
     async function drawIsochrone(b, dist){
@@ -2416,6 +2437,7 @@ const AREAS_GEOJSON = {
     btnShowAll.addEventListener('click', () => {
       state.selectedBranches = new Set(BRANCHES.map((_,i)=>i));
       branchChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=true);
+      resetBranchBrowsingView();
       renderSelectedBranches();
       const bb = fitBoundsOf(branchMarkers); if (bb) map.fitBounds(bb, {padding:[20,20]});
     });
@@ -2432,11 +2454,13 @@ const AREAS_GEOJSON = {
     btnBranchesAll.addEventListener('click', ()=>{
       state.selectedBranches = new Set(BRANCHES.map((_,i)=>i));
       branchChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=true);
+      resetBranchBrowsingView();
       renderSelectedBranches();
     });
     btnBranchesNone.addEventListener('click', ()=>{
       state.selectedBranches.clear();
       branchChecklist.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=false);
+      resetBranchBrowsingView();
       renderSelectedBranches();
     });
 
